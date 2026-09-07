@@ -5,18 +5,22 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
 const PORT = 3000;
 
-// Ensure upload & data directories exist
-const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-const dataDir = path.join(process.cwd(), 'data');
+// Ensure upload & data directories exist in both public and dist (for production)
+const rootDir = process.cwd();
+const uploadsDir = path.join(rootDir, 'public', 'uploads');
+const distUploadsDir = path.join(rootDir, 'dist', 'uploads');
+const dataDir = path.join(rootDir, 'data');
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+if (!fs.existsSync(distUploadsDir)) {
+  try {
+    fs.mkdirSync(distUploadsDir, { recursive: true });
+  } catch {}
 }
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -80,10 +84,41 @@ function readConfig() {
   return DEFAULT_CONFIG;
 }
 
+// Helper to sync config to Supabase so all visitors on all devices receive it
+async function syncConfigToSupabase(cfg: any) {
+  try {
+    const res = await fetch('https://ltgareozhzpovjubtywy.supabase.co/rest/v1/promocoes', {
+      method: 'POST',
+      headers: {
+        'apikey': 'sb_publishable_Aj0wx1nf_AJwsk6WGRzXaQ_U5kLENTO',
+        'Authorization': 'Bearer sb_publishable_Aj0wx1nf_AJwsk6WGRzXaQ_U5kLENTO',
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({
+        id: '__SYSTEM_RESTAURANT_CONFIG__',
+        dish_name: 'CONFIG_DENDE_E_BRASA',
+        description: JSON.stringify(cfg),
+        original_price: 0,
+        promotional_price: 0,
+        badge_text: cfg.videoUrl ? 'CONFIG_ACTIVE' : 'CONFIG_DEFAULT',
+        active: false,
+        highlighted: false
+      })
+    });
+    if (res.ok) {
+      console.log('⚡ [Supabase Sync] Restaurant config synced globally to Supabase');
+    }
+  } catch (err) {
+    console.warn('[Supabase Sync Warning]', err);
+  }
+}
+
 // Helper to write config
 function writeConfig(cfg: any) {
   try {
     fs.writeFileSync(configFilePath, JSON.stringify(cfg, null, 2), 'utf8');
+    syncConfigToSupabase(cfg);
     return true;
   } catch (err) {
     console.error('Error writing config file:', err);
@@ -223,6 +258,16 @@ app.post('/api/upload-video', (req, res) => {
     }
 
     const filename = req.file.filename;
+
+    // Mirror to dist/uploads for production static serving
+    try {
+      if (fs.existsSync(distUploadsDir)) {
+        fs.copyFileSync(req.file.path, path.join(distUploadsDir, filename));
+      }
+    } catch (err) {
+      console.warn('Could not mirror upload to dist/uploads:', err);
+    }
+
     // URL with cache-busting timestamp so all clients immediately see the new video
     const videoUrl = `/uploads/${filename}?t=${Date.now()}`;
     const fileSizeMB = (req.file.size / (1024 * 1024)).toFixed(1);

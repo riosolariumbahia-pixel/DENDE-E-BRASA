@@ -115,7 +115,7 @@ export async function uploadVideoToServer(
 
   const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
     formData.append('video', file);
@@ -134,61 +134,42 @@ export async function uploadVideoToServer(
       if (xhr.status >= 200 && xhr.status < 300 && contentType.includes('application/json')) {
         try {
           const res = JSON.parse(xhr.responseText);
-          resolve({
-            videoUrl: res.videoUrl,
-            filename: res.filename,
-            size: res.size,
-            sizeMB: res.sizeMB,
-            message: res.message || 'Vídeo publicado com sucesso no servidor!'
-          });
-          return;
+          if (res.videoUrl) {
+            resolve({
+              videoUrl: res.videoUrl,
+              filename: res.filename || file.name,
+              size: res.size || file.size,
+              sizeMB: res.sizeMB || sizeMB,
+              message: res.message || 'Vídeo publicado com sucesso para todos os visitantes do site!'
+            });
+            return;
+          }
         } catch {
           // parse error
         }
       }
 
-      // If server returned non-JSON (e.g. Vercel static rewrites to index.html) or other response:
-      // Gracefully resolve with the local persistent video URL
-      resolve({
-        videoUrl: localBlobUrl || '/dende-e-brasa-espaco.mp4',
-        filename: file.name,
-        size: file.size,
-        sizeMB,
-        message: 'Vídeo ativado no navegador com sucesso!'
-      });
+      let errorMsg = `Erro no envio (Status HTTP ${xhr.status}).`;
+      try {
+        const errJson = JSON.parse(xhr.responseText);
+        if (errJson.error) errorMsg = errJson.error;
+      } catch {}
+      reject(new Error(errorMsg + ' Dica: Você também pode colar um link do YouTube ou link direto de vídeo para ativação universal imediata.'));
     });
 
     xhr.addEventListener('error', () => {
-      // Connection failed (or static host without backend): fallback to local blob/IndexedDB
-      resolve({
-        videoUrl: localBlobUrl || '/dende-e-brasa-espaco.mp4',
-        filename: file.name,
-        size: file.size,
-        sizeMB,
-        message: 'Vídeo ativado localmente no dispositivo!'
-      });
+      reject(new Error('Falha de conexão com o servidor ao enviar o vídeo. Verifique sua rede ou cole o link do YouTube / Vimeo.'));
     });
 
     xhr.addEventListener('abort', () => {
-      resolve({
-        videoUrl: localBlobUrl || '/dende-e-brasa-espaco.mp4',
-        filename: file.name,
-        size: file.size,
-        sizeMB,
-        message: 'Upload cancelado.'
-      });
+      reject(new Error('O envio do vídeo foi cancelado.'));
     });
 
     try {
       xhr.open('POST', '/api/upload-video', true);
       xhr.send(formData);
-    } catch {
-      resolve({
-        videoUrl: localBlobUrl || '/dende-e-brasa-espaco.mp4',
-        filename: file.name,
-        size: file.size,
-        sizeMB
-      });
+    } catch (err: any) {
+      reject(new Error(err?.message || 'Falha ao iniciar envio do vídeo.'));
     }
   });
 }

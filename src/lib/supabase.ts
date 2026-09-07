@@ -135,6 +135,8 @@ on public.cardapio for all using (true) with check (true);
 `;
 
 // Helper: Promotions
+export const SYSTEM_CONFIG_KEY = '__SYSTEM_RESTAURANT_CONFIG__';
+
 export async function getPromotions(): Promise<SpecialPromotion[]> {
   try {
     const { data, error } = await supabase
@@ -143,18 +145,20 @@ export async function getPromotions(): Promise<SpecialPromotion[]> {
       .order('highlighted', { ascending: false });
 
     if (!error && data && data.length > 0) {
-      return data.map((d: any) => ({
-        id: d.id,
-        dishName: d.dish_name,
-        description: d.description || '',
-        originalPrice: Number(d.original_price),
-        promotionalPrice: Number(d.promotional_price),
-        badgeText: d.badge_text || 'PROMOÇÃO',
-        active: d.active !== false,
-        validDays: d.valid_days || '',
-        image: d.image || '',
-        highlighted: Boolean(d.highlighted)
-      }));
+      return data
+        .filter((d: any) => !d.id.startsWith('__SYSTEM_'))
+        .map((d: any) => ({
+          id: d.id,
+          dishName: d.dish_name,
+          description: d.description || '',
+          originalPrice: Number(d.original_price),
+          promotionalPrice: Number(d.promotional_price),
+          badgeText: d.badge_text || 'PROMOÇÃO',
+          active: d.active !== false,
+          validDays: d.valid_days || '',
+          image: d.image || '',
+          highlighted: Boolean(d.highlighted)
+        }));
     }
   } catch {
     // Ignore and fallback
@@ -298,19 +302,43 @@ export async function deleteMenuItem(id: string): Promise<void> {
   }
 }
 
-// Helper: Restaurant Config
+// Helper: Restaurant Config (Fully Synchronized Across All Devices via Supabase Cloud)
 export async function fetchRemoteRestaurantConfig(): Promise<RestaurantConfig> {
+  // 1. Fetch from Supabase Cloud (accessible from any phone, computer, or visitor globally)
+  try {
+    const { data, error } = await supabase
+      .from('promocoes')
+      .select('description')
+      .eq('id', SYSTEM_CONFIG_KEY)
+      .maybeSingle();
+
+    if (!error && data && data.description) {
+      const parsed = JSON.parse(data.description);
+      if (parsed && typeof parsed === 'object' && parsed.name) {
+        const merged: RestaurantConfig = { ...INITIAL_RESTAURANT_CONFIG, ...parsed };
+        localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(merged));
+        return merged;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch remote config from Supabase:', err);
+  }
+
+  // 2. Fetch from local Node server /api/config
   try {
     const res = await fetch('/api/config');
     const contentType = res.headers.get('content-type');
     if (res.ok && contentType && contentType.includes('application/json')) {
       const data = await res.json();
-      localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(data));
-      return data;
+      const merged: RestaurantConfig = { ...INITIAL_RESTAURANT_CONFIG, ...data };
+      localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(merged));
+      return merged;
     }
   } catch (err) {
-    console.warn('Could not fetch remote config, using local cache:', err);
+    console.warn('Could not fetch remote config from server:', err);
   }
+
+  // 3. Fallback to localStorage or INITIAL_RESTAURANT_CONFIG
   return getRestaurantConfig();
 }
 
@@ -318,7 +346,7 @@ export function getRestaurantConfig(): RestaurantConfig {
   const stored = localStorage.getItem(STORAGE_KEYS.CONFIG);
   if (stored) {
     try {
-      return JSON.parse(stored);
+      return { ...INITIAL_RESTAURANT_CONFIG, ...JSON.parse(stored) };
     } catch {
       // parse error
     }
@@ -328,17 +356,49 @@ export function getRestaurantConfig(): RestaurantConfig {
 }
 
 export async function saveRestaurantConfig(config: RestaurantConfig): Promise<void> {
-  localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
+  // Never persist local-only ephemeral blob: URLs to shared config
+  const sanitizedConfig: RestaurantConfig = { ...config };
+  if (sanitizedConfig.videoUrl && sanitizedConfig.videoUrl.startsWith('blob:')) {
+    console.warn('Ignorando blob URL para configuração compartilhada global.');
+    sanitizedConfig.videoUrl = INITIAL_RESTAURANT_CONFIG.videoUrl || '/dende-e-brasa-espaco.mp4';
+  }
+
+  // 1. Immediate local save for UI responsiveness
+  localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(sanitizedConfig));
+
+  // 2. Immediate save to Supabase Cloud so ALL devices worldwide receive this config
+  try {
+    await supabase.from('promocoes').upsert({
+      id: SYSTEM_CONFIG_KEY,
+      dish_name: 'CONFIG_DENDE_E_BRASA',
+      description: JSON.stringify(sanitizedConfig),
+      original_price: 0,
+      promotional_price: 0,
+      badge_text: sanitizedConfig.videoUrl ? 'CONFIG_ACTIVE' : 'CONFIG_DEFAULT',
+      active: false,
+      highlighted: false
+    });
+    console.log('✅ Configuração e vídeo do restaurante salvos no Supabase com sucesso!');
+  } catch (err) {
+    console.error('Erro ao salvar configuração no Supabase:', err);
+  }
+
+  // 3. Sync to Node /api/config
   try {
     await fetch('/api/config', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(config)
+      body: JSON.stringify(sanitizedConfig)
     });
   } catch (err) {
     console.warn('Could not sync config to server:', err);
+  }
+
+  // 4. Notify open components in the current window
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('dende-config-updated', { detail: sanitizedConfig }));
   }
 }
 

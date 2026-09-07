@@ -381,7 +381,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
       setStoreVideoUrl(res.videoUrl);
       setVideoUploadSuccess(
-        `✅ Vídeo "${file.name}" (${res.sizeMB} MB) enviado e ativado com sucesso! Já está em exibição no site.`
+        `✅ Vídeo "${file.name}" (${res.sizeMB} MB) publicado globalmente! Sincronizado no servidor e na nuvem, visível para todos os visitantes em qualquer dispositivo.`
       );
       setUploadProgress(100);
       onRefreshData();
@@ -424,7 +424,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
       setStoreVideoUrl(res.videoUrl);
       setVideoUploadSuccess(
-        `✅ Vídeo "${selectedVideoFile.name}" (${res.sizeMB} MB) implantado e ativo com sucesso no site!`
+        `✅ Vídeo "${selectedVideoFile.name}" (${res.sizeMB} MB) publicado com sucesso! Sincronizado para todos os visitantes e dispositivos.`
       );
       setUploadProgress(100);
       onRefreshData();
@@ -1289,15 +1289,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                                 const file = e.target.files?.[0];
                                 if (file) {
                                   try {
-                                    setStoreConfigFeedback('Enviando vídeo para o servidor para todos os acessos...');
+                                    setStoreConfigFeedback('Enviando vídeo para o servidor e nuvem...');
                                     const result = await uploadVideoToServer(file);
                                     setStoreVideoUrl(result.videoUrl);
-                                    setStoreConfigFeedback(`Vídeo "${file.name}" implantado para todos os acessos!`);
-                                    setTimeout(() => setStoreConfigFeedback(''), 4000);
+                                    setStoreConfigFeedback(`✅ Vídeo "${file.name}" publicado globalmente para todos os acessos!`);
+                                    setTimeout(() => setStoreConfigFeedback(''), 5000);
                                   } catch (err: any) {
-                                    const localUrl = URL.createObjectURL(file);
-                                    setStoreVideoUrl(localUrl);
-                                    setStoreConfigFeedback('Vídeo carregado localmente.');
+                                    alert('Erro ao publicar vídeo no servidor: ' + (err?.message || 'Falha de conexão'));
+                                    setStoreConfigFeedback('Não foi possível publicar este arquivo.');
                                   }
                                 }
                               }}

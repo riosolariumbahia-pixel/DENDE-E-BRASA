@@ -49,23 +49,12 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
 
   const parsedVideo = parseVideoUrl(currentVideoSrc);
 
-  // Sync with global config.videoUrl whenever updated
+  // Sync with global config.videoUrl whenever updated (via Supabase or admin)
   useEffect(() => {
-    if (config.videoUrl && config.videoUrl !== currentVideoSrc) {
+    if (config.videoUrl) {
       setCurrentVideoSrc(config.videoUrl);
     }
   }, [config.videoUrl]);
-
-  // Check local cache if config video is still default
-  useEffect(() => {
-    if (!config.videoUrl || config.videoUrl === '/dende-e-brasa-espaco.mp4') {
-      getSavedVideoUrl().then((savedUrl) => {
-        if (savedUrl) {
-          setCurrentVideoSrc(savedUrl);
-        }
-      });
-    }
-  }, []);
 
   const chapters = [
     {

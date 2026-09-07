@@ -45,7 +45,9 @@ import {
   getMenuItems,
   getRestaurantConfig,
   fetchRemoteRestaurantConfig,
-  saveRestaurantConfig
+  saveRestaurantConfig,
+  supabase,
+  SYSTEM_CONFIG_KEY
 } from './lib/supabase';
 import { MessageCircle, ShoppingBag } from 'lucide-react';
 import { formatCurrency } from './lib/utils';
@@ -82,13 +84,22 @@ export default function App() {
   useEffect(() => {
     loadData();
 
-    // Poll remote config every 15s to immediately receive video changes across all visitor devices
+    // 1. Listen for local config updates dispatched from admin modal in same window
+    const handleConfigUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<RestaurantConfig>;
+      if (customEvent.detail) {
+        setConfig(customEvent.detail);
+      }
+    };
+    window.addEventListener('dende-config-updated', handleConfigUpdated);
+
+    // 2. Poll remote config every 8s to immediately receive video changes across all visitor devices
     const interval = setInterval(async () => {
       try {
         const latestConfig = await fetchRemoteRestaurantConfig();
         if (latestConfig && latestConfig.videoUrl) {
           setConfig((prev) => {
-            if (prev.videoUrl !== latestConfig.videoUrl) {
+            if (prev.videoUrl !== latestConfig.videoUrl || prev.videoTitle !== latestConfig.videoTitle) {
               return latestConfig;
             }
             return prev;
@@ -97,7 +108,7 @@ export default function App() {
       } catch {
         // ignore background poll error
       }
-    }, 15000);
+    }, 8000);
 
     const handleFocus = async () => {
       try {
@@ -108,6 +119,31 @@ export default function App() {
       } catch {}
     };
     window.addEventListener('focus', handleFocus);
+
+    // 3. Realtime Supabase subscription so all visitors in the world update immediately on save
+    let realtimeChannel: any = null;
+    try {
+      realtimeChannel = supabase
+        .channel('global-config-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'promocoes' }, async (payload) => {
+          if (payload.new && (payload.new as any).id === SYSTEM_CONFIG_KEY) {
+            try {
+              const raw = (payload.new as any).description;
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.videoUrl) {
+                  setConfig((prev) => ({ ...prev, ...parsed }));
+                }
+              }
+            } catch {}
+          } else {
+            getPromotions().then(setPromotions).catch(() => {});
+          }
+        })
+        .subscribe();
+    } catch (err) {
+      console.warn('Realtime channel subscription error:', err);
+    }
 
     // Load cart from session storage if exists
     const savedCart = sessionStorage.getItem('dendeebrasa_cart');
@@ -122,6 +158,10 @@ export default function App() {
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('dende-config-updated', handleConfigUpdated);
+      if (realtimeChannel) {
+        supabase.removeChannel(realtimeChannel);
+      }
     };
   }, []);
 
