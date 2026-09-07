@@ -20,20 +20,29 @@ import {
   Film
 } from 'lucide-react';
 import { RestaurantConfig } from '../types';
-import { saveVideoFile, getSavedVideoUrl, clearSavedVideo } from '../lib/videoStorage';
+import {
+  saveVideoFile,
+  getSavedVideoUrl,
+  clearSavedVideo,
+  uploadVideoToServer
+} from '../lib/videoStorage';
 
 interface VideoSpotlightSectionProps {
   config: RestaurantConfig;
   onUpdateVideoUrl?: (newUrl: string) => void;
   onScrollToMenu: () => void;
   onScrollToLocation: () => void;
+  onOpenAdmin?: () => void;
+  isAdmin?: boolean;
 }
 
 export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
   config,
   onUpdateVideoUrl,
   onScrollToMenu,
-  onScrollToLocation
+  onScrollToLocation,
+  onOpenAdmin,
+  isAdmin
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const bgVideoRef = useRef<HTMLVideoElement>(null);
@@ -54,24 +63,23 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
     config.videoUrl || '/dende-e-brasa-espaco.mp4'
   );
 
-  // Check if there is a saved video in IndexedDB
-  useEffect(() => {
-    getSavedVideoUrl().then((savedUrl) => {
-      if (savedUrl) {
-        setCurrentVideoSrc(savedUrl);
-        if (onUpdateVideoUrl) {
-          onUpdateVideoUrl(savedUrl);
-        }
-      }
-    });
-  }, []);
-
-  // Update if prop changes and no local override
+  // Sync with global config.videoUrl whenever updated
   useEffect(() => {
     if (config.videoUrl && config.videoUrl !== currentVideoSrc) {
       setCurrentVideoSrc(config.videoUrl);
     }
   }, [config.videoUrl]);
+
+  // Check local cache if config video is still default
+  useEffect(() => {
+    if (!config.videoUrl || config.videoUrl === '/dende-e-brasa-espaco.mp4') {
+      getSavedVideoUrl().then((savedUrl) => {
+        if (savedUrl) {
+          setCurrentVideoSrc(savedUrl);
+        }
+      });
+    }
+  }, []);
 
   const chapters = [
     {
@@ -213,14 +221,15 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
   // Process file upload from file input or drag-and-drop
   const processVideoFile = async (file: File) => {
     try {
-      const persistentUrl = await saveVideoFile(file);
-      setCurrentVideoSrc(persistentUrl);
+      setUploadNotice(`Enviando "${file.name}" para o servidor para TODOS os clientes verem...`);
+      const res = await uploadVideoToServer(file);
+      setCurrentVideoSrc(res.videoUrl);
       if (onUpdateVideoUrl) {
-        onUpdateVideoUrl(persistentUrl);
+        onUpdateVideoUrl(res.videoUrl);
       }
-      setUploadNotice(`Vídeo real "${file.name}" carregado e salvo com sucesso!`);
+      setUploadNotice(`Vídeo real "${file.name}" implantado com sucesso para TODOS os clientes do site!`);
       setTimeout(() => setUploadNotice(null), 6000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       // Fallback to object URL
       const localUrl = URL.createObjectURL(file);
@@ -228,7 +237,7 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
       if (onUpdateVideoUrl) {
         onUpdateVideoUrl(localUrl);
       }
-      setUploadNotice(`Vídeo "${file.name}" carregado!`);
+      setUploadNotice(`Vídeo aplicado localmente: ${err.message || ''}`);
       setTimeout(() => setUploadNotice(null), 6000);
     }
   };
@@ -551,15 +560,25 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
             className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl bg-white hover:bg-stone-50 text-[#4A2C2A] border-2 border-orange-300 text-xs font-black shadow-xs transition-all cursor-pointer"
             title="Selecione o arquivo de vídeo do seu celular ou computador"
           >
-            <Upload className="w-3.5 h-3.5 text-orange-600" />
-            <span>Carregar Vídeo do Celular/PC</span>
+            <Smartphone className="w-3.5 h-3.5 text-orange-600" />
+            <span>Trocar Vídeo do Celular</span>
           </button>
+
+          {onOpenAdmin && (
+            <button
+              onClick={onOpenAdmin}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl bg-orange-100 hover:bg-orange-200 text-orange-950 border-2 border-orange-300 text-xs font-black shadow-xs transition-all cursor-pointer"
+            >
+              <Film className="w-3.5 h-3.5 text-orange-700" />
+              <span>Painel Admin (Vídeo Global)</span>
+            </button>
+          )}
         </div>
 
         {/* Helper Note for Owner */}
         <div className="mt-4 text-center max-w-xl mx-auto">
           <p className="text-[11px] text-[#4A2C2A]/70 font-medium">
-            💡 <strong>Dica para o proprietário:</strong> Você pode clicar em <em>"Carregar Vídeo do Celular/PC"</em> ou arrastar o arquivo de vídeo diretamente sobre o reprodutor para aplicar e salvar o vídeo real imediatamente.
+            💡 <strong>Atualização Global:</strong> Ao enviar ou trocar o vídeo pelo celular ou painel admin, ele é salvo no servidor e transmitido para <strong>todos os acessos de clientes</strong> no site.
           </p>
         </div>
       </div>

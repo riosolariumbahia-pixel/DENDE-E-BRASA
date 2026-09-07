@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Lock,
@@ -18,7 +18,20 @@ import {
   ExternalLink,
   DollarSign,
   Utensils,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Film,
+  Smartphone,
+  Upload,
+  Globe,
+  RotateCcw,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  CheckCircle2,
+  Sparkles,
+  RefreshCw,
+  Video
 } from 'lucide-react';
 import {
   SpecialPromotion,
@@ -41,7 +54,11 @@ import {
   SUPABASE_URL
 } from '../lib/supabase';
 import { formatCurrency } from '../lib/utils';
-import { saveVideoFile } from '../lib/videoStorage';
+import {
+  saveVideoFile,
+  uploadVideoToServer,
+  resetVideoOnServer
+} from '../lib/videoStorage';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -53,7 +70,7 @@ interface AdminModalProps {
   onRefreshData: () => void;
   isAdminLoggedIn: boolean;
   setIsAdminLoggedIn: (logged: boolean) => void;
-  initialTab?: 'promocoes' | 'cardapio' | 'loja' | 'supabase';
+  initialTab?: 'promocoes' | 'cardapio' | 'video' | 'loja' | 'supabase';
 }
 
 export const AdminModal: React.FC<AdminModalProps> = ({
@@ -68,7 +85,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   setIsAdminLoggedIn,
   initialTab = 'promocoes'
 }) => {
-  const [activeTab, setActiveTab] = useState<'promocoes' | 'cardapio' | 'loja' | 'supabase'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'promocoes' | 'cardapio' | 'video' | 'loja' | 'supabase'>(initialTab);
   
   // Login form state
   const [username, setUsername] = useState('admin');
@@ -118,6 +135,33 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [storeVideoDesc, setStoreVideoDesc] = useState(config.videoDescription || 'Mesas ao ar livre, telão com jogos ao vivo, espetinhos e carnes na brasa viva em Stella Maris.');
   const [storeConfigFeedback, setStoreConfigFeedback] = useState('');
 
+  // --- Dedicated Video Upload & Management State ---
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [selectedVideoPreview, setSelectedVideoPreview] = useState<string | null>(null);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [videoUploadSuccess, setVideoUploadSuccess] = useState<string | null>(null);
+  const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
+  const [isDraggingVideo, setIsDraggingVideo] = useState(false);
+  const [activeVideoPlaying, setActiveVideoPlaying] = useState(false);
+  const [activeVideoMuted, setActiveVideoMuted] = useState(true);
+
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
+  const mobileCameraVideoInputRef = useRef<HTMLInputElement>(null);
+  const activeVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Sync state when config updates
+  useEffect(() => {
+    setStoreWhatsapp(config.whatsappNumber);
+    setStorePhoneDisplay(config.phoneDisplay);
+    setStoreStreet(config.address.street);
+    setStoreNumber(config.address.number);
+    setStoreNeighborhood(config.address.neighborhood);
+    setStoreVideoUrl(config.videoUrl || '/dende-e-brasa-espaco.mp4');
+    setStoreVideoTitle(config.videoTitle || 'Conheça o Espaço Dendê e Brasa');
+    setStoreVideoDesc(config.videoDescription || 'Mesas ao ar livre, telão com jogos ao vivo, espetinhos e carnes na brasa viva em Stella Maris.');
+  }, [config]);
+
   useEffect(() => {
     if (isOpen && isAdminLoggedIn) {
       checkSupabaseHealth().then(setHealth);
@@ -128,7 +172,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     if (initialTab) {
       setActiveTab(initialTab);
     }
-  }, [initialTab]);
+  }, [initialTab, isOpen]);
 
   if (!isOpen) return null;
 
@@ -273,7 +317,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   };
 
   // --- Save Store Config ---
-  const handleSaveStoreConfig = (e: React.FormEvent) => {
+  const handleSaveStoreConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     const updated: RestaurantConfig = {
       ...config,
@@ -289,9 +333,95 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         neighborhood: storeNeighborhood.trim()
       }
     };
-    saveRestaurantConfig(updated);
+    await saveRestaurantConfig(updated);
     setStoreConfigFeedback('Dados do restaurante salvos com sucesso!');
     setTimeout(() => setStoreConfigFeedback(''), 3000);
+    onRefreshData();
+  };
+
+  // --- Dedicated Video Upload & Management Handlers ---
+  const handleSelectVideoFile = (file: File) => {
+    if (!file.type.startsWith('video/') && !/\.(mp4|mov|m4v|webm|avi|mkv|3gp)$/i.test(file.name)) {
+      setVideoUploadError('Por favor selecione um arquivo de vídeo válido (MP4, MOV, WEBM, etc).');
+      return;
+    }
+    setSelectedVideoFile(file);
+    setVideoUploadError(null);
+    setVideoUploadSuccess(null);
+    try {
+      const previewUrl = URL.createObjectURL(file);
+      setSelectedVideoPreview(previewUrl);
+    } catch {
+      setSelectedVideoPreview(null);
+    }
+  };
+
+  const handleDeployVideoToAll = async () => {
+    if (!selectedVideoFile) {
+      alert('Selecione primeiro o arquivo de vídeo do seu celular ou computador.');
+      return;
+    }
+
+    setIsUploadingVideo(true);
+    setUploadProgress(0);
+    setVideoUploadError(null);
+    setVideoUploadSuccess(null);
+
+    try {
+      const res = await uploadVideoToServer(selectedVideoFile, (percent) => {
+        setUploadProgress(percent);
+      });
+
+      setStoreVideoUrl(res.videoUrl);
+      setVideoUploadSuccess(
+        `Vídeo "${selectedVideoFile.name}" (${res.sizeMB} MB) implantado e ativo com sucesso! Agora TODOS os clientes que acessarem o site em qualquer celular ou computador verão este novo vídeo do restaurante.`
+      );
+      setSelectedVideoFile(null);
+      setSelectedVideoPreview(null);
+      setUploadProgress(100);
+      onRefreshData();
+    } catch (err: any) {
+      console.error('Video deploy error:', err);
+      setVideoUploadError(err.message || 'Erro ao implantar o vídeo no servidor.');
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const handleResetVideo = async () => {
+    if (!confirm('Deseja restaurar o vídeo original de apresentação do Dendê e Brasa para todos os acessos do site?')) {
+      return;
+    }
+
+    setIsUploadingVideo(true);
+    setVideoUploadError(null);
+    setVideoUploadSuccess(null);
+
+    try {
+      const defaultUrl = await resetVideoOnServer();
+      setStoreVideoUrl(defaultUrl);
+      setSelectedVideoFile(null);
+      setSelectedVideoPreview(null);
+      setVideoUploadSuccess('Vídeo original restaurado com sucesso para todos os clientes!');
+      onRefreshData();
+    } catch (err: any) {
+      setVideoUploadError('Erro ao restaurar vídeo: ' + err.message);
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const handleSaveVideoMeta = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated: RestaurantConfig = {
+      ...config,
+      videoUrl: storeVideoUrl.trim() || '/dende-e-brasa-espaco.mp4',
+      videoTitle: storeVideoTitle.trim(),
+      videoDescription: storeVideoDesc.trim()
+    };
+    await saveRestaurantConfig(updated);
+    setVideoUploadSuccess('Título e descrição do vídeo salvos com sucesso!');
+    setTimeout(() => setVideoUploadSuccess(null), 4000);
     onRefreshData();
   };
 
@@ -442,6 +572,19 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 >
                   <Utensils className="w-4 h-4" />
                   <span>Cardápio & Preços ({menuItems.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('video')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs sm:text-sm font-black transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'video'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'bg-yellow-100/60 text-[#4A2C2A] hover:bg-yellow-100'
+                  }`}
+                >
+                  <Film className="w-4 h-4 text-amber-300 fill-amber-300" />
+                  <span>Vídeo do Restaurante</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
                 </button>
 
                 <button
@@ -1025,7 +1168,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
                             <span>Vídeo de Apresentação do Espaço (Ponto Principal)</span>
                           </label>
-                          <span className="text-xs text-orange-600 font-bold">Arquivo local ou link online</span>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('video')}
+                            className="text-xs text-orange-700 hover:text-orange-950 font-black underline cursor-pointer flex items-center gap-1"
+                          >
+                            <Smartphone className="w-3.5 h-3.5" />
+                            <span>Abrir Painel Completo de Vídeo</span>
+                          </button>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1041,13 +1191,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-orange-200 font-medium text-[#4A2C2A]"
                             />
                             <p className="text-[11px] text-[#4A2C2A]/60 mt-1 font-medium">
-                              Padrão: <code>/dende-e-brasa-espaco.mp4</code> ou URL externa
+                              Padrão: <code>/dende-e-brasa-espaco.mp4</code> ou URL do servidor
                             </p>
                           </div>
 
                           <div>
                             <label className="block text-xs font-black text-[#4A2C2A] mb-1">
-                              Carregar Arquivo de Vídeo Direto
+                              Carregar Vídeo para Todos os Clientes
                             </label>
                             <input
                               type="file"
@@ -1056,18 +1206,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                                 const file = e.target.files?.[0];
                                 if (file) {
                                   try {
-                                    const savedUrl = await saveVideoFile(file);
-                                    setStoreVideoUrl(savedUrl);
-                                  } catch {
+                                    setStoreConfigFeedback('Enviando vídeo para o servidor para todos os acessos...');
+                                    const result = await uploadVideoToServer(file);
+                                    setStoreVideoUrl(result.videoUrl);
+                                    setStoreConfigFeedback(`Vídeo "${file.name}" implantado para todos os acessos!`);
+                                    setTimeout(() => setStoreConfigFeedback(''), 4000);
+                                  } catch (err: any) {
                                     const localUrl = URL.createObjectURL(file);
                                     setStoreVideoUrl(localUrl);
+                                    setStoreConfigFeedback('Vídeo carregado localmente.');
                                   }
                                 }
                               }}
                               className="w-full text-xs px-3 py-2 rounded-xl border border-orange-200 font-medium text-[#4A2C2A] bg-stone-50 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-orange-600 file:text-white cursor-pointer"
                             />
                             <p className="text-[11px] text-[#4A2C2A]/60 mt-1 font-medium">
-                              Permite carregar seu arquivo de vídeo original do celular ou PC
+                              Salva e atualiza o vídeo para todos os visitantes do site
                             </p>
                           </div>
                         </div>
@@ -1139,6 +1293,383 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         Atualizar Senha
                       </button>
                     </form>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: DEDICATED RESTAURANT VIDEO MANAGEMENT (MOBILE & ALL CLIENTS) */}
+              {activeTab === 'video' && (
+                <div className="space-y-6">
+                  {/* Top Announcement Banner */}
+                  <div className="bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 p-5 rounded-3xl text-white shadow-md relative overflow-hidden">
+                    <div className="relative z-10 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 rounded-xl bg-white/20 backdrop-blur-xs">
+                          <Globe className="w-5 h-5 text-yellow-200" />
+                        </span>
+                        <span className="text-xs font-black uppercase tracking-wider bg-white/20 px-2.5 py-0.5 rounded-full">
+                          Implantador Global de Vídeo
+                        </span>
+                      </div>
+                      <h3 className="text-xl sm:text-2xl font-black font-['Outfit'] leading-tight">
+                        Vídeo do Restaurante em TODOS os Acessos do Site
+                      </h3>
+                      <p className="text-xs sm:text-sm text-yellow-100/90 leading-relaxed max-w-2xl">
+                        O vídeo carregado através desta tela é salvo diretamente no servidor e{' '}
+                        <strong>implantado para 100% dos clientes e visitantes</strong> que acessarem o site em qualquer
+                        celular, computador ou tablet. Perfeito para mostrar o ambiente acolhedor, mesas ao ar livre, telão e as carnes na brasa!
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Feedback Alerts */}
+                  {videoUploadSuccess && (
+                    <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-emerald-900 text-sm font-bold flex items-start gap-3 shadow-xs animate-fadeIn">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 leading-snug">
+                        {videoUploadSuccess}
+                      </div>
+                      <button
+                        onClick={() => setVideoUploadSuccess(null)}
+                        className="text-emerald-700 hover:text-emerald-900 cursor-pointer text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
+                  {videoUploadError && (
+                    <div className="p-4 rounded-2xl bg-red-50 border-2 border-red-300 text-red-900 text-sm font-bold flex items-start gap-3 shadow-xs animate-fadeIn">
+                      <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 leading-snug">
+                        {videoUploadError}
+                      </div>
+                      <button
+                        onClick={() => setVideoUploadError(null)}
+                        className="text-red-700 hover:text-red-900 cursor-pointer text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left Column: Upload from Mobile & File selection */}
+                    <div className="lg:col-span-7 space-y-6">
+                      <div className="bg-white p-6 rounded-3xl border-2 border-[#FDE68A] shadow-sm space-y-5">
+                        <div className="flex items-center justify-between pb-3 border-b border-[#FDE68A]">
+                          <div className="flex items-center gap-2">
+                            <Smartphone className="w-5 h-5 text-orange-600" />
+                            <h4 className="font-black text-lg text-[#4A2C2A] font-['Outfit']">
+                              Carregar Vídeo do Celular
+                            </h4>
+                          </div>
+                          <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2.5 py-1 rounded-full border border-orange-200">
+                            MP4, MOV, WEBM
+                          </span>
+                        </div>
+
+                        {/* Hidden file inputs for mobile gallery & direct camera */}
+                        <input
+                          ref={videoFileInputRef}
+                          type="file"
+                          accept="video/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleSelectVideoFile(file);
+                          }}
+                        />
+                        <input
+                          ref={mobileCameraVideoInputRef}
+                          type="file"
+                          accept="video/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleSelectVideoFile(file);
+                          }}
+                        />
+
+                        {/* Quick Mobile Action Buttons */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => videoFileInputRef.current?.click()}
+                            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-gradient-to-b from-orange-50 to-orange-100 hover:from-orange-100 hover:to-orange-200 border-2 border-dashed border-orange-300 text-[#4A2C2A] cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xs group"
+                          >
+                            <Smartphone className="w-7 h-7 text-orange-600 mb-2 group-hover:scale-110 transition-transform" />
+                            <span className="font-black text-sm text-center">
+                              Escolher da Galeria do Celular
+                            </span>
+                            <span className="text-[11px] text-[#4A2C2A]/70 text-center mt-0.5">
+                              Selecione um vídeo já gravado
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => mobileCameraVideoInputRef.current?.click()}
+                            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-gradient-to-b from-red-50 to-red-100 hover:from-red-100 hover:to-red-200 border-2 border-dashed border-red-300 text-[#4A2C2A] cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xs group"
+                          >
+                            <Video className="w-7 h-7 text-red-600 mb-2 group-hover:scale-110 transition-transform" />
+                            <span className="font-black text-sm text-center">
+                              Gravar Vídeo Agora com a Câmera
+                            </span>
+                            <span className="text-[11px] text-[#4A2C2A]/70 text-center mt-0.5">
+                              Abre a câmera para filmar o restaurante
+                            </span>
+                          </button>
+                        </div>
+
+                        {/* Drag and Drop Zone for PC */}
+                        <div
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setIsDraggingVideo(true);
+                          }}
+                          onDragLeave={() => setIsDraggingVideo(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setIsDraggingVideo(false);
+                            const file = e.dataTransfer.files?.[0];
+                            if (file) handleSelectVideoFile(file);
+                          }}
+                          onClick={() => videoFileInputRef.current?.click()}
+                          className={`p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer text-center ${
+                            isDraggingVideo
+                              ? 'border-orange-600 bg-orange-100/70 scale-[1.01]'
+                              : 'border-stone-300 bg-stone-50/60 hover:bg-stone-100/70 hover:border-orange-400'
+                          }`}
+                        >
+                          <Upload className="w-8 h-8 text-stone-400 mx-auto mb-2" />
+                          <p className="text-xs sm:text-sm font-black text-[#4A2C2A]">
+                            Ou arraste o arquivo de vídeo do seu computador aqui
+                          </p>
+                          <p className="text-[11px] text-stone-500 mt-1 font-medium">
+                            Suporta formatos padrão (.mp4, .mov do iPhone, .webm). Até 300MB.
+                          </p>
+                        </div>
+
+                        {/* Selected Video Preview & Deploy Action */}
+                        {selectedVideoFile && (
+                          <div className="p-4 rounded-2xl bg-orange-50 border-2 border-orange-300 space-y-4 animate-fadeIn">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Film className="w-5 h-5 text-orange-600 shrink-0" />
+                                <div>
+                                  <p className="font-black text-xs sm:text-sm text-[#4A2C2A] truncate max-w-[200px] sm:max-w-[320px]">
+                                    {selectedVideoFile.name}
+                                  </p>
+                                  <p className="text-[11px] text-stone-600 font-medium">
+                                    {(selectedVideoFile.size / (1024 * 1024)).toFixed(2)} MB • {selectedVideoFile.type || 'video'}
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={isUploadingVideo}
+                                onClick={() => {
+                                  setSelectedVideoFile(null);
+                                  setSelectedVideoPreview(null);
+                                }}
+                                className="text-xs text-red-600 hover:text-red-800 font-black cursor-pointer px-2 py-1"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+
+                            {/* Local Preview */}
+                            {selectedVideoPreview && (
+                              <div className="rounded-xl overflow-hidden bg-black max-h-56 relative flex items-center justify-center">
+                                <video
+                                  src={selectedVideoPreview}
+                                  controls
+                                  className="max-h-56 w-auto mx-auto"
+                                />
+                              </div>
+                            )}
+
+                            {/* Upload Progress */}
+                            {isUploadingVideo && (
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between text-xs font-black text-[#4A2C2A]">
+                                  <span>Enviando para o servidor...</span>
+                                  <span>{uploadProgress}%</span>
+                                </div>
+                                <div className="w-full h-3 bg-stone-200 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-gradient-to-r from-orange-500 to-red-600 transition-all duration-200"
+                                    style={{ width: `${uploadProgress}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Deploy Button */}
+                            <button
+                              type="button"
+                              disabled={isUploadingVideo}
+                              onClick={handleDeployVideoToAll}
+                              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white font-black text-sm shadow-[4px_4px_0px_0px_rgba(74,44,42,1)] hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isUploadingVideo ? (
+                                <>
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                  <span>Implantando para Todos ({uploadProgress}%)...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Globe className="w-4 h-4 text-yellow-300" />
+                                  <span>🚀 Publicar Vídeo para TODOS os Clientes do Site</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Video Title and Description Form */}
+                      <form onSubmit={handleSaveVideoMeta} className="bg-white p-6 rounded-3xl border-2 border-[#FDE68A] shadow-sm space-y-4">
+                        <h4 className="font-black text-base text-[#4A2C2A] flex items-center gap-2">
+                          <Edit2 className="w-4 h-4 text-orange-600" />
+                          <span>Texto de Apresentação do Vídeo</span>
+                        </h4>
+
+                        <div>
+                          <label className="block text-xs font-black text-[#4A2C2A] mb-1">
+                            Título Exibido no Vídeo
+                          </label>
+                          <input
+                            type="text"
+                            value={storeVideoTitle}
+                            onChange={(e) => setStoreVideoTitle(e.target.value)}
+                            placeholder="Conheça o Espaço Dendê e Brasa"
+                            className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-orange-200 font-medium text-[#4A2C2A]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-black text-[#4A2C2A] mb-1">
+                            Descrição do Espaço
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={storeVideoDesc}
+                            onChange={(e) => setStoreVideoDesc(e.target.value)}
+                            placeholder="Mesas ao ar livre, telão com jogos ao vivo, espetinhos e carnes na brasa viva em Stella Maris."
+                            className="w-full text-sm px-3.5 py-2 rounded-xl border border-orange-200 font-medium text-[#4A2C2A]"
+                          />
+                        </div>
+
+                        <div className="flex justify-end">
+                          <button
+                            type="submit"
+                            className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-xs transition-all cursor-pointer"
+                          >
+                            Salvar Título e Descrição
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+
+                    {/* Right Column: Currently Active Video on the Site */}
+                    <div className="lg:col-span-5 space-y-6">
+                      <div className="bg-white p-6 rounded-3xl border-2 border-[#FDE68A] shadow-sm space-y-4">
+                        <div className="flex items-center justify-between pb-3 border-b border-[#FDE68A]">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <h4 className="font-black text-base text-[#4A2C2A] font-['Outfit']">
+                              Vídeo Ativo no Site Agora
+                            </h4>
+                          </div>
+                          <span className="text-[11px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                            Ao Vivo
+                          </span>
+                        </div>
+
+                        {/* Embedded Active Video Player */}
+                        <div className="relative rounded-2xl overflow-hidden bg-black aspect-video flex items-center justify-center border-2 border-stone-800 shadow-inner group">
+                          <video
+                            ref={activeVideoRef}
+                            src={storeVideoUrl || '/dende-e-brasa-espaco.mp4'}
+                            playsInline
+                            muted={activeVideoMuted}
+                            loop
+                            className="w-full h-full object-cover"
+                            onPlay={() => setActiveVideoPlaying(true)}
+                            onPause={() => setActiveVideoPlaying(false)}
+                          />
+
+                          {/* Control Overlay Buttons */}
+                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeVideoRef.current) {
+                                  if (activeVideoPlaying) {
+                                    activeVideoRef.current.pause();
+                                  } else {
+                                    activeVideoRef.current.play();
+                                  }
+                                }
+                              }}
+                              className="p-3 rounded-full bg-white/90 text-[#4A2C2A] hover:bg-white shadow-lg cursor-pointer transition-transform hover:scale-110"
+                            >
+                              {activeVideoPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeVideoRef.current) {
+                                  activeVideoRef.current.muted = !activeVideoMuted;
+                                  setActiveVideoMuted(!activeVideoMuted);
+                                }
+                              }}
+                              className="p-3 rounded-full bg-white/90 text-[#4A2C2A] hover:bg-white shadow-lg cursor-pointer transition-transform hover:scale-110"
+                            >
+                              {activeVideoMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                            </button>
+                          </div>
+
+                          <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] text-white/90 bg-black/60 px-2.5 py-1 rounded-lg backdrop-blur-xs">
+                            <span className="truncate">URL: {storeVideoUrl}</span>
+                            <span className="font-mono shrink-0 ml-2">
+                              {activeVideoMuted ? 'Mudo' : 'Som Ativo'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* File Details */}
+                        <div className="p-3.5 rounded-2xl bg-yellow-50/70 border border-[#FDE68A] space-y-2 text-xs text-[#4A2C2A]">
+                          <div className="flex justify-between font-bold">
+                            <span>Status de Distribuição:</span>
+                            <span className="text-emerald-700 font-black">Visível para Todos os Clientes</span>
+                          </div>
+                          {config.lastVideoUpdate && (
+                            <div className="space-y-1 text-[11px] text-[#4A2C2A]/80 border-t border-yellow-200/80 pt-2">
+                              <div><strong>Arquivo:</strong> {config.lastVideoUpdate.originalName}</div>
+                              <div><strong>Tamanho:</strong> {config.lastVideoUpdate.sizeMB} MB</div>
+                              <div><strong>Enviado em:</strong> {config.lastVideoUpdate.uploadedAt}</div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Restore Default Button */}
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            disabled={isUploadingVideo}
+                            onClick={handleResetVideo}
+                            className="w-full py-2.5 px-3 rounded-xl border border-stone-300 hover:border-red-400 bg-stone-50 hover:bg-red-50 text-stone-700 hover:text-red-700 font-black text-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Restaurar Vídeo Original do Dendê e Brasa</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

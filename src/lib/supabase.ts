@@ -299,6 +299,20 @@ export async function deleteMenuItem(id: string): Promise<void> {
 }
 
 // Helper: Restaurant Config
+export async function fetchRemoteRestaurantConfig(): Promise<RestaurantConfig> {
+  try {
+    const res = await fetch('/api/config');
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(data));
+      return data;
+    }
+  } catch (err) {
+    console.warn('Could not fetch remote config, using local cache:', err);
+  }
+  return getRestaurantConfig();
+}
+
 export function getRestaurantConfig(): RestaurantConfig {
   const stored = localStorage.getItem(STORAGE_KEYS.CONFIG);
   if (stored) {
@@ -312,8 +326,19 @@ export function getRestaurantConfig(): RestaurantConfig {
   return INITIAL_RESTAURANT_CONFIG;
 }
 
-export function saveRestaurantConfig(config: RestaurantConfig): void {
+export async function saveRestaurantConfig(config: RestaurantConfig): Promise<void> {
   localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(config)
+    });
+  } catch (err) {
+    console.warn('Could not sync config to server:', err);
+  }
 }
 
 // Admin Credentials Helper

@@ -63,13 +63,88 @@ export async function getSavedVideoUrl(): Promise<string | null> {
   }
 }
 
-export async function clearSavedVideo(): Promise<void> {
+export interface VideoUploadResult {
+  videoUrl: string;
+  filename: string;
+  size: number;
+  sizeMB: string;
+  message?: string;
+}
+
+/**
+ * Uploads video from mobile or desktop directly to the server,
+ * making it accessible to all clients and visitors across all devices.
+ */
+export async function uploadVideoToServer(
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<VideoUploadResult> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append('video', file);
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      });
+    }
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const res = JSON.parse(xhr.responseText);
+          // Also save in local IndexedDB as fast cache
+          saveVideoFile(file).catch(() => {});
+          resolve({
+            videoUrl: res.videoUrl,
+            filename: res.filename,
+            size: res.size,
+            sizeMB: res.sizeMB,
+            message: res.message
+          });
+        } catch (parseErr) {
+          reject(new Error('Resposta inválida do servidor ao salvar vídeo.'));
+        }
+      } else {
+        try {
+          const errRes = JSON.parse(xhr.responseText);
+          reject(new Error(errRes.error || `Erro ${xhr.status} no upload do vídeo.`));
+        } catch {
+          reject(new Error(`Falha no upload do vídeo (Status ${xhr.status}).`));
+        }
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      reject(new Error('Falha de conexão durante o envio do vídeo. Verifique sua internet.'));
+    });
+
+    xhr.addEventListener('abort', () => {
+      reject(new Error('Upload do vídeo cancelado.'));
+    });
+
+    xhr.open('POST', '/api/upload-video', true);
+    xhr.send(formData);
+  });
+}
+
+/**
+ * Resets the active video on the server back to the default recording
+ */
+export async function resetVideoOnServer(): Promise<string> {
   try {
-    const db = await openDB();
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    store.delete('active_restaurant_video');
+    const res = await fetch('/api/reset-video', { method: 'POST' });
+    const data = await res.json();
+    await clearSavedVideo();
+    return data.videoUrl || '/dende-e-brasa-espaco.mp4';
   } catch (err) {
-    console.error('Error clearing video from IndexedDB', err);
+    console.error('Error resetting video on server', err);
+    await clearSavedVideo();
+    return '/dende-e-brasa-espaco.mp4';
   }
 }
+

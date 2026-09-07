@@ -44,6 +44,7 @@ import {
   getPromotions,
   getMenuItems,
   getRestaurantConfig,
+  fetchRemoteRestaurantConfig,
   saveRestaurantConfig
 } from './lib/supabase';
 import { MessageCircle, ShoppingBag } from 'lucide-react';
@@ -56,18 +57,18 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [adminInitialTab, setAdminInitialTab] = useState<'promocoes' | 'cardapio' | 'loja' | 'supabase'>('promocoes');
+  const [adminInitialTab, setAdminInitialTab] = useState<'promocoes' | 'cardapio' | 'video' | 'loja' | 'supabase'>('promocoes');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Load data on startup
   const loadData = async () => {
     try {
-      const [promosData, menuData] = await Promise.all([
+      const [promosData, menuData, configData] = await Promise.all([
         getPromotions(),
-        getMenuItems()
+        getMenuItems(),
+        fetchRemoteRestaurantConfig()
       ]);
-      const configData = getRestaurantConfig();
       setPromotions(promosData);
       setMenuItems(menuData);
       setConfig(configData);
@@ -163,13 +164,13 @@ export default function App() {
     setCart([]);
   };
 
-  const handleUpdateVideoUrl = (newUrl: string) => {
+  const handleUpdateVideoUrl = async (newUrl: string) => {
     const updated = {
       ...config,
       videoUrl: newUrl
     };
     setConfig(updated);
-    saveRestaurantConfig(updated);
+    await saveRestaurantConfig(updated);
   };
 
   // Scroll helpers
@@ -180,7 +181,7 @@ export default function App() {
     }
   };
 
-  const openAdminWithTab = (tab: 'promocoes' | 'cardapio' | 'loja' | 'supabase' = 'promocoes') => {
+  const openAdminWithTab = (tab: 'promocoes' | 'cardapio' | 'video' | 'loja' | 'supabase' = 'promocoes') => {
     setAdminInitialTab(tab);
     setIsAdminOpen(true);
   };
@@ -212,9 +213,9 @@ export default function App() {
         {/* Video Spotlight - Main Presentation of the Restaurant Space */}
         <VideoSpotlightSection
           config={config}
-          onOpenAdmin={() => openAdminWithTab('loja')}
+          onOpenAdmin={() => openAdminWithTab('video')}
           onScrollToMenu={() => scrollToSection('cardapio')}
-          onScrollToMap={() => scrollToSection('localizacao')}
+          onScrollToLocation={() => scrollToSection('localizacao')}
           onUpdateVideoUrl={handleUpdateVideoUrl}
           isAdmin={isAdminLoggedIn}
         />

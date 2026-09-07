@@ -84,4 +84,10 @@ export interface RestaurantConfig {
   videoUrl?: string;
   videoTitle?: string;
   videoDescription?: string;
+  lastVideoUpdate?: {
+    filename: string;
+    originalName: string;
+    sizeMB: string;
+    uploadedAt: string;
+  } | null;
 }
