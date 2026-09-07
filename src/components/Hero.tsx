@@ -6,9 +6,7 @@ import {
   Sparkles,
   MessageCircle,
   ArrowRight,
-  Utensils,
-  Play,
-  Film
+  Utensils
 } from 'lucide-react';
 import { RestaurantConfig } from '../types';
 
@@ -16,14 +14,12 @@ interface HeroProps {
   config: RestaurantConfig;
   onScrollToMenu: () => void;
   onScrollToPromos: () => void;
-  onScrollToVideo?: () => void;
 }
 
 export const Hero: React.FC<HeroProps> = ({
   config,
   onScrollToMenu,
-  onScrollToPromos,
-  onScrollToVideo
+  onScrollToPromos
 }) => {
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-orange-500/15 via-[#FFF8E7] to-[#FFF8E7] pt-8 pb-16 lg:pt-14 lg:pb-24">
