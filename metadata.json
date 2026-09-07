@@ -1,0 +1,6 @@
+{
+  "name": "Dendê e Brasa",
+  "description": "Cardápio digital, pedidos via WhatsApp, localização e promoções do Dendê e Brasa - Acarajé e Parrilla em Stella Maris, Salvador.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
