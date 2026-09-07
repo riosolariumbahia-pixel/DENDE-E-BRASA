@@ -12,21 +12,10 @@ import {
   MessageCircle,
   MapPin,
   Utensils,
-  Upload,
-  RefreshCw,
-  Info,
-  Smartphone,
-  CheckCircle2,
-  Film,
-  Camera
+  Smartphone
 } from 'lucide-react';
 import { RestaurantConfig } from '../types';
-import {
-  saveVideoFile,
-  getSavedVideoUrl,
-  clearSavedVideo,
-  uploadVideoToServer
-} from '../lib/videoStorage';
+import { getSavedVideoUrl } from '../lib/videoStorage';
 
 interface VideoSpotlightSectionProps {
   config: RestaurantConfig;
@@ -39,17 +28,12 @@ interface VideoSpotlightSectionProps {
 
 export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
   config,
-  onUpdateVideoUrl,
   onScrollToMenu,
-  onScrollToLocation,
-  onOpenAdmin,
-  isAdmin
+  onScrollToLocation
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const bgVideoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(true);
@@ -58,10 +42,7 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
   const [activeChapter, setActiveChapter] = useState<number>(0);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showControls, setShowControls] = useState<boolean>(true);
-  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
-  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [isVerticalMode, setIsVerticalMode] = useState<boolean>(true);
-  const [isDragging, setIsDragging] = useState<boolean>(false);
   const [currentVideoSrc, setCurrentVideoSrc] = useState<string>(
     config.videoUrl || '/dende-e-brasa-espaco.mp4'
   );
@@ -254,52 +235,6 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
     }
   };
 
-  // Process file upload from file input or drag-and-drop
-  const processVideoFile = async (file: File) => {
-    try {
-      setUploadNotice(`Iniciando upload de "${file.name}"...`);
-      setUploadPercent(0);
-      const res = await uploadVideoToServer(file, (percent) => {
-        setUploadPercent(percent);
-        setUploadNotice(`Enviando vídeo: ${percent}%...`);
-      });
-      setCurrentVideoSrc(res.videoUrl);
-      if (onUpdateVideoUrl) {
-        onUpdateVideoUrl(res.videoUrl);
-      }
-      setUploadPercent(null);
-      setUploadNotice(`✅ Vídeo real "${file.name}" implantado com sucesso e ativo para TODOS os clientes em reprodução contínua!`);
-      setTimeout(() => setUploadNotice(null), 7000);
-    } catch (err: any) {
-      console.error(err);
-      setUploadPercent(null);
-      // Fallback to object URL
-      const localUrl = URL.createObjectURL(file);
-      setCurrentVideoSrc(localUrl);
-      if (onUpdateVideoUrl) {
-        onUpdateVideoUrl(localUrl);
-      }
-      setUploadNotice(`Vídeo aplicado: ${err.message || ''}`);
-      setTimeout(() => setUploadNotice(null), 6000);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      processVideoFile(file);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('video/')) {
-      processVideoFile(file);
-    }
-  };
-
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -327,28 +262,13 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
           <p className="text-base sm:text-lg text-[#4A2C2A]/90 font-medium leading-relaxed">
             {config.videoDescription || 'Carnes e espetinhos suculentos na Parrilla Brava com brasa viva, mesas ao ar livre, telão com jogos de futebol ao vivo e resenha baiana no Empório Greco.'}
           </p>
-
-          {uploadNotice && (
-            <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold shadow-xs animate-fade-in">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{uploadNotice}</span>
-            </div>
-          )}
         </div>
 
-        {/* Cinematic Video Player Container with Drag-and-Drop */}
+        {/* Cinematic Video Player Container */}
         <div
           ref={containerRef}
           onMouseEnter={() => setShowControls(true)}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={handleDrop}
-          className={`relative max-w-4xl mx-auto rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(74,44,42,0.25)] border-4 ${
-            isDragging ? 'border-orange-500 ring-4 ring-orange-300' : 'border-white'
-          } bg-stone-950 group transition-all`}
+          className="relative max-w-4xl mx-auto rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(74,44,42,0.25)] border-4 border-white bg-stone-950 group transition-all"
         >
           {/* Ambient Video Background (blurred fill for vertical videos) */}
           <div className="relative aspect-[9/16] sm:aspect-[16/10] md:aspect-video w-full bg-black flex items-center justify-center overflow-hidden">
@@ -378,22 +298,6 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
               preload="auto"
               onClick={togglePlay}
             />
-
-            {/* Real-time Video Upload Overlay */}
-            {uploadPercent !== null && (
-              <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
-                <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4" />
-                <p className="text-white font-black text-lg mb-2">Implantando Vídeo para Todos os Clientes...</p>
-                <div className="w-full max-w-xs bg-stone-800 rounded-full h-3 overflow-hidden border border-orange-500/40 mb-2">
-                  <div
-                    className="bg-gradient-to-r from-orange-500 to-yellow-400 h-full transition-all duration-200"
-                    style={{ width: `${uploadPercent}%` }}
-                  />
-                </div>
-                <p className="text-yellow-300 font-bold text-sm">{uploadPercent}% concluído</p>
-                <p className="text-stone-300 text-xs mt-1">O vídeo passará a ser exibido em loop contínuo no site</p>
-              </div>
-            )}
 
             {/* Video overlay ambient gradient */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/50 pointer-events-none z-10" />
@@ -437,17 +341,8 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
               </div>
             </div>
 
-            {/* Drag overlay feedback */}
-            {isDragging && (
-              <div className="absolute inset-0 bg-orange-600/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center text-white">
-                <Upload className="w-16 h-16 animate-bounce mb-2" />
-                <span className="text-xl font-black">Solte seu vídeo aqui</span>
-                <span className="text-xs text-yellow-200">Arquivo de vídeo MP4 / MOV</span>
-              </div>
-            )}
-
             {/* Big Central Play/Pause Button */}
-            {!isPlaying && !isDragging && (
+            {!isPlaying && (
               <button
                 onClick={togglePlay}
                 className="absolute z-20 w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-orange-600/90 hover:bg-orange-600 text-white border-4 border-yellow-300 flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
@@ -577,7 +472,7 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
           </div>
         </div>
 
-        {/* Primary Action Buttons & Direct Upload Dropzone */}
+        {/* Primary Action Buttons */}
         <div className="mt-8 max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-4 text-center">
           <a
             href={`https://wa.me/${config.whatsappNumber}?text=${encodeURIComponent(
@@ -606,58 +501,6 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
             <Utensils className="w-4 h-4 text-yellow-300" />
             <span>Pedir no Cardápio</span>
           </button>
-
-          {/* Hidden File Inputs for owner to load/select custom video file directly */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="video/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="video/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl bg-white hover:bg-stone-50 text-[#4A2C2A] border-2 border-orange-300 text-xs font-black shadow-xs transition-all cursor-pointer"
-            title="Selecione o arquivo de vídeo do seu celular ou computador"
-          >
-            <Smartphone className="w-3.5 h-3.5 text-orange-600" />
-            <span>Galeria do Celular</span>
-          </button>
-
-          <button
-            onClick={() => cameraInputRef.current?.click()}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl bg-white hover:bg-stone-50 text-[#4A2C2A] border-2 border-orange-300 text-xs font-black shadow-xs transition-all cursor-pointer"
-            title="Gravar vídeo agora com a câmera do celular"
-          >
-            <Camera className="w-3.5 h-3.5 text-red-600" />
-            <span>Gravar na Câmera</span>
-          </button>
-
-          {onOpenAdmin && (
-            <button
-              onClick={onOpenAdmin}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl bg-orange-100 hover:bg-orange-200 text-orange-950 border-2 border-orange-300 text-xs font-black shadow-xs transition-all cursor-pointer"
-            >
-              <Film className="w-3.5 h-3.5 text-orange-700" />
-              <span>Painel Admin (Vídeo Global)</span>
-            </button>
-          )}
-        </div>
-
-        {/* Helper Note for Owner */}
-        <div className="mt-4 text-center max-w-xl mx-auto">
-          <p className="text-[11px] text-[#4A2C2A]/70 font-medium">
-            💡 <strong>Atualização Global:</strong> Ao enviar ou trocar o vídeo pelo celular ou painel admin, ele é salvo no servidor e transmitido para <strong>todos os acessos de clientes</strong> no site.
-          </p>
         </div>
       </div>
     </section>
