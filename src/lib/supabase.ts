@@ -302,7 +302,8 @@ export async function deleteMenuItem(id: string): Promise<void> {
 export async function fetchRemoteRestaurantConfig(): Promise<RestaurantConfig> {
   try {
     const res = await fetch('/api/config');
-    if (res.ok) {
+    const contentType = res.headers.get('content-type');
+    if (res.ok && contentType && contentType.includes('application/json')) {
       const data = await res.json();
       localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(data));
       return data;

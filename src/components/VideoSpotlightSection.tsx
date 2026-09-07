@@ -32,7 +32,6 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
   onScrollToLocation
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const bgVideoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
@@ -121,7 +120,6 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
 
     const handlePlay = () => {
       setIsPlaying(true);
-      bgVideoRef.current?.play().catch(() => {});
     };
 
     const handlePause = () => {
@@ -129,17 +127,12 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
       if (video.duration && video.currentTime < video.duration - 0.3) {
         setIsPlaying(false);
       }
-      bgVideoRef.current?.pause();
     };
 
     // Continuous loop guarantee: immediate replay on end without stall
     const handleEnded = () => {
       video.currentTime = 0;
       video.play().catch(() => {});
-      if (bgVideoRef.current) {
-        bgVideoRef.current.currentTime = 0;
-        bgVideoRef.current.play().catch(() => {});
-      }
     };
 
     const handleCanPlay = () => {
@@ -187,10 +180,8 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
     if (!videoRef.current) return;
     if (isPlaying) {
       videoRef.current.pause();
-      bgVideoRef.current?.pause();
     } else {
       videoRef.current.play().catch(console.error);
-      bgVideoRef.current?.play().catch(() => {});
     }
   };
 
@@ -206,17 +197,14 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
     if (videoRef.current) {
       videoRef.current.currentTime = time;
       setCurrentTime(time);
-      if (bgVideoRef.current) bgVideoRef.current.currentTime = time;
     }
   };
 
   const jumpToChapter = (chapterTime: number, chapterIndex: number) => {
     if (videoRef.current) {
       videoRef.current.currentTime = chapterTime;
-      if (bgVideoRef.current) bgVideoRef.current.currentTime = chapterTime;
       if (!isPlaying) {
         videoRef.current.play().catch(console.error);
-        bgVideoRef.current?.play().catch(() => {});
       }
       setActiveChapter(chapterIndex);
     }
@@ -270,18 +258,10 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
           onMouseEnter={() => setShowControls(true)}
           className="relative max-w-4xl mx-auto rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(74,44,42,0.25)] border-4 border-white bg-stone-950 group transition-all"
         >
-          {/* Ambient Video Background (blurred fill for vertical videos) */}
-          <div className="relative aspect-[9/16] sm:aspect-[16/10] md:aspect-video w-full bg-black flex items-center justify-center overflow-hidden">
-            {isVerticalMode && (
-              <video
-                ref={bgVideoRef}
-                src={currentVideoSrc}
-                className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-110 pointer-events-none"
-                playsInline
-                loop
-                muted
-              />
-            )}
+          {/* Ambient Video Background & Canvas */}
+          <div className="relative aspect-[9/16] sm:aspect-[16/10] md:aspect-video w-full bg-gradient-to-br from-stone-950 via-black to-stone-900 flex items-center justify-center overflow-hidden">
+            {/* Ambient subtle glow */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(234,88,12,0.15)_0%,transparent_70%)] pointer-events-none" />
 
             {/* Main Video Element */}
             <video
@@ -297,6 +277,20 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
               muted={isMuted}
               preload="auto"
               onClick={togglePlay}
+              onEnded={(e) => {
+                const target = e.currentTarget;
+                target.currentTime = 0;
+                target.play().catch(() => {});
+              }}
+              onError={(e) => {
+                // Fallback to default bundled video if remote fails
+                const target = e.currentTarget;
+                if (target.src !== `${window.location.origin}/dende-e-brasa-espaco.mp4` && !target.src.endsWith('/dende-e-brasa-espaco.mp4')) {
+                  target.src = '/dende-e-brasa-espaco.mp4';
+                  target.load();
+                  target.play().catch(() => {});
+                }
+              }}
             />
 
             {/* Video overlay ambient gradient */}

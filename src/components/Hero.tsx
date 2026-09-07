@@ -48,6 +48,30 @@ export const Hero: React.FC<HeroProps> = ({
     }
   }, [config.videoUrl]);
 
+  // Pause Hero video when scrolled off-screen so VideoSpotlightSection has 100% decoder priority
+  useEffect(() => {
+    const video = heroVideoRef.current;
+    if (!video) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            video.play().catch(() => {});
+            setIsPlaying(true);
+          } else {
+            video.pause();
+            setIsPlaying(false);
+          }
+        });
+      },
+      { threshold: 0.2 }
+    );
+
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, []);
+
   const togglePlay = () => {
     if (!heroVideoRef.current) return;
     if (isPlaying) {
@@ -165,7 +189,13 @@ export const Hero: React.FC<HeroProps> = ({
                   loop
                   muted={isMuted}
                   playsInline
+                  preload="auto"
                   onClick={togglePlay}
+                  onEnded={(e) => {
+                    const target = e.currentTarget;
+                    target.currentTime = 0;
+                    target.play().catch(() => {});
+                  }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/40 pointer-events-none" />
 
