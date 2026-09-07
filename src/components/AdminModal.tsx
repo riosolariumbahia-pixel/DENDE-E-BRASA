@@ -340,7 +340,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   };
 
   // --- Dedicated Video Upload & Management Handlers ---
-  const handleSelectVideoFile = (file: File) => {
+  const handleSelectVideoFile = async (file: File) => {
     if (!file.type.startsWith('video/') && !/\.(mp4|mov|m4v|webm|avi|mkv|3gp)$/i.test(file.name)) {
       setVideoUploadError('Por favor selecione um arquivo de vídeo válido (MP4, MOV, WEBM, etc).');
       return;
@@ -353,6 +353,28 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       setSelectedVideoPreview(previewUrl);
     } catch {
       setSelectedVideoPreview(null);
+    }
+
+    // Auto-deploy immediately to server upon selection so it becomes active for all clients immediately
+    setIsUploadingVideo(true);
+    setUploadProgress(0);
+
+    try {
+      const res = await uploadVideoToServer(file, (percent) => {
+        setUploadProgress(percent);
+      });
+
+      setStoreVideoUrl(res.videoUrl);
+      setVideoUploadSuccess(
+        `✅ Vídeo "${file.name}" (${res.sizeMB} MB) enviado e implantado com sucesso! Já está em exibição contínua para TODOS os visitantes do site.`
+      );
+      setUploadProgress(100);
+      onRefreshData();
+    } catch (err: any) {
+      console.error('Video deploy error:', err);
+      setVideoUploadError(err.message || 'Erro ao implantar o vídeo no servidor.');
+    } finally {
+      setIsUploadingVideo(false);
     }
   };
 
@@ -374,10 +396,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
       setStoreVideoUrl(res.videoUrl);
       setVideoUploadSuccess(
-        `Vídeo "${selectedVideoFile.name}" (${res.sizeMB} MB) implantado e ativo com sucesso! Agora TODOS os clientes que acessarem o site em qualquer celular ou computador verão este novo vídeo do restaurante.`
+        `✅ Vídeo "${selectedVideoFile.name}" (${res.sizeMB} MB) implantado e ativo com sucesso! Agora TODOS os clientes que acessarem o site em qualquer celular ou computador verão este novo vídeo do restaurante.`
       );
-      setSelectedVideoFile(null);
-      setSelectedVideoPreview(null);
       setUploadProgress(100);
       onRefreshData();
     } catch (err: any) {
@@ -1593,13 +1613,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         <div className="relative rounded-2xl overflow-hidden bg-black aspect-video flex items-center justify-center border-2 border-stone-800 shadow-inner group">
                           <video
                             ref={activeVideoRef}
+                            key={storeVideoUrl}
                             src={storeVideoUrl || '/dende-e-brasa-espaco.mp4'}
                             playsInline
+                            autoPlay
                             muted={activeVideoMuted}
                             loop
+                            preload="auto"
                             className="w-full h-full object-cover"
                             onPlay={() => setActiveVideoPlaying(true)}
                             onPause={() => setActiveVideoPlaying(false)}
+                            onEnded={() => {
+                              if (activeVideoRef.current) {
+                                activeVideoRef.current.currentTime = 0;
+                                activeVideoRef.current.play().catch(() => {});
+                              }
+                            }}
                           />
 
                           {/* Control Overlay Buttons */}

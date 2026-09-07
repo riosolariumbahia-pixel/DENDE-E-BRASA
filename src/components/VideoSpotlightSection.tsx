@@ -17,7 +17,8 @@ import {
   Info,
   Smartphone,
   CheckCircle2,
-  Film
+  Film,
+  Camera
 } from 'lucide-react';
 import { RestaurantConfig } from '../types';
 import {
@@ -48,6 +49,7 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
   const bgVideoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(true);
@@ -57,6 +59,7 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showControls, setShowControls] = useState<boolean>(true);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [isVerticalMode, setIsVerticalMode] = useState<boolean>(true);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [currentVideoSrc, setCurrentVideoSrc] = useState<string>(
@@ -108,17 +111,14 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
     }
   ];
 
-  // Sync state with HTML video element
+  // Sync state with HTML video element and enforce continuous uninterrupted playback
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     const handleTimeUpdate = () => {
       setCurrentTime(video.currentTime);
-      if (bgVideoRef.current && Math.abs(bgVideoRef.current.currentTime - video.currentTime) > 0.3) {
-        bgVideoRef.current.currentTime = video.currentTime;
-      }
-      // Determine active chapter
+      // Determine active chapter smoothly without forcing seeks on background video
       if (video.currentTime >= 16) {
         setActiveChapter(2);
       } else if (video.currentTime >= 4) {
@@ -142,27 +142,63 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
       setIsPlaying(true);
       bgVideoRef.current?.play().catch(() => {});
     };
+
     const handlePause = () => {
-      setIsPlaying(false);
+      // Don't mark paused if near end (loop listener will immediately restart)
+      if (video.duration && video.currentTime < video.duration - 0.3) {
+        setIsPlaying(false);
+      }
       bgVideoRef.current?.pause();
+    };
+
+    // Continuous loop guarantee: immediate replay on end without stall
+    const handleEnded = () => {
+      video.currentTime = 0;
+      video.play().catch(() => {});
+      if (bgVideoRef.current) {
+        bgVideoRef.current.currentTime = 0;
+        bgVideoRef.current.play().catch(() => {});
+      }
+    };
+
+    const handleCanPlay = () => {
+      video.play().catch(() => {});
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        video.play().catch(() => {});
+      }
     };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
+    video.addEventListener('ended', handleEnded);
+    video.addEventListener('canplay', handleCanPlay);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Attempt autoplay muted
+    // Continuous autoplay muted start
     video.muted = true;
-    video.play().catch(() => {
-      setIsPlaying(false);
-    });
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => setIsPlaying(true))
+        .catch(() => {
+          // If browser policy requires user gesture, will play on click
+          setIsPlaying(false);
+        });
+    }
 
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
+      video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('canplay', handleCanPlay);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [currentVideoSrc]);
 
@@ -221,23 +257,29 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
   // Process file upload from file input or drag-and-drop
   const processVideoFile = async (file: File) => {
     try {
-      setUploadNotice(`Enviando "${file.name}" para o servidor para TODOS os clientes verem...`);
-      const res = await uploadVideoToServer(file);
+      setUploadNotice(`Iniciando upload de "${file.name}"...`);
+      setUploadPercent(0);
+      const res = await uploadVideoToServer(file, (percent) => {
+        setUploadPercent(percent);
+        setUploadNotice(`Enviando vídeo: ${percent}%...`);
+      });
       setCurrentVideoSrc(res.videoUrl);
       if (onUpdateVideoUrl) {
         onUpdateVideoUrl(res.videoUrl);
       }
-      setUploadNotice(`Vídeo real "${file.name}" implantado com sucesso para TODOS os clientes do site!`);
-      setTimeout(() => setUploadNotice(null), 6000);
+      setUploadPercent(null);
+      setUploadNotice(`✅ Vídeo real "${file.name}" implantado com sucesso e ativo para TODOS os clientes em reprodução contínua!`);
+      setTimeout(() => setUploadNotice(null), 7000);
     } catch (err: any) {
       console.error(err);
+      setUploadPercent(null);
       // Fallback to object URL
       const localUrl = URL.createObjectURL(file);
       setCurrentVideoSrc(localUrl);
       if (onUpdateVideoUrl) {
         onUpdateVideoUrl(localUrl);
       }
-      setUploadNotice(`Vídeo aplicado localmente: ${err.message || ''}`);
+      setUploadNotice(`Vídeo aplicado: ${err.message || ''}`);
       setTimeout(() => setUploadNotice(null), 6000);
     }
   };
@@ -324,15 +366,34 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
             {/* Main Video Element */}
             <video
               ref={videoRef}
+              key={currentVideoSrc}
               src={currentVideoSrc}
               className={`relative z-10 w-full h-full ${
                 isVerticalMode ? 'object-contain' : 'object-cover'
               } cursor-pointer`}
               playsInline
+              autoPlay
               loop
               muted={isMuted}
+              preload="auto"
               onClick={togglePlay}
             />
+
+            {/* Real-time Video Upload Overlay */}
+            {uploadPercent !== null && (
+              <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+                <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4" />
+                <p className="text-white font-black text-lg mb-2">Implantando Vídeo para Todos os Clientes...</p>
+                <div className="w-full max-w-xs bg-stone-800 rounded-full h-3 overflow-hidden border border-orange-500/40 mb-2">
+                  <div
+                    className="bg-gradient-to-r from-orange-500 to-yellow-400 h-full transition-all duration-200"
+                    style={{ width: `${uploadPercent}%` }}
+                  />
+                </div>
+                <p className="text-yellow-300 font-bold text-sm">{uploadPercent}% concluído</p>
+                <p className="text-stone-300 text-xs mt-1">O vídeo passará a ser exibido em loop contínuo no site</p>
+              </div>
+            )}
 
             {/* Video overlay ambient gradient */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/50 pointer-events-none z-10" />
@@ -546,11 +607,19 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
             <span>Pedir no Cardápio</span>
           </button>
 
-          {/* Hidden File Input for owner to load/select custom video file directly */}
+          {/* Hidden File Inputs for owner to load/select custom video file directly */}
           <input
             ref={fileInputRef}
             type="file"
             accept="video/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="video/*"
+            capture="environment"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -561,7 +630,16 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
             title="Selecione o arquivo de vídeo do seu celular ou computador"
           >
             <Smartphone className="w-3.5 h-3.5 text-orange-600" />
-            <span>Trocar Vídeo do Celular</span>
+            <span>Galeria do Celular</span>
+          </button>
+
+          <button
+            onClick={() => cameraInputRef.current?.click()}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl bg-white hover:bg-stone-50 text-[#4A2C2A] border-2 border-orange-300 text-xs font-black shadow-xs transition-all cursor-pointer"
+            title="Gravar vídeo agora com a câmera do celular"
+          >
+            <Camera className="w-3.5 h-3.5 text-red-600" />
+            <span>Gravar na Câmera</span>
           </button>
 
           {onOpenAdmin && (

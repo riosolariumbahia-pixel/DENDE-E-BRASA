@@ -237,23 +237,6 @@ export const Hero: React.FC<HeroProps> = ({
                 </div>
               </div>
 
-              {/* Floating Second Card (Acarajé no Dendê) */}
-              <div className="absolute -bottom-6 -left-4 sm:-left-8 bg-white/95 backdrop-blur-md p-3.5 rounded-2xl shadow-xl border-2 border-[#FDE68A] flex items-center gap-3.5 max-w-[260px] sm:max-w-[280px] z-20">
-                <img
-                  src="https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?auto=format&fit=crop&w=200&q=80"
-                  alt="Acarajé Tradicional no Dendê"
-                  className="w-16 h-16 rounded-xl object-cover shadow-sm shrink-0"
-                />
-                <div>
-                  <span className="text-[10px] font-black text-orange-950 uppercase tracking-wider bg-yellow-400 px-2 py-0.5 rounded-full">
-                    Acarajé Raiz
-                  </span>
-                  <h4 className="font-extrabold text-sm text-[#4A2C2A] leading-snug mt-1">
-                    Vatapá, Caruru & Camarão
-                  </h4>
-                  <p className="text-xs font-black text-orange-600">Frito no puro dendê</p>
-                </div>
-              </div>
 
               {/* Floating Discount Pill */}
               <div className="absolute -top-4 -right-2 sm:-right-4 bg-yellow-400 text-orange-950 font-black text-xs px-4 py-2 rounded-full shadow-lg border border-orange-300 flex items-center gap-1.5 animate-bounce z-20">

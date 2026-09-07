@@ -124,7 +124,58 @@ const upload = multer({
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// Static route for uploaded videos with byte-range support for video player scrubbing
+// Dedicated HTTP Range streaming route for uploaded restaurant videos (seamless continuous playback on iOS, Android & PC)
+app.get('/uploads/:filename', (req, res) => {
+  const filename = path.basename(req.params.filename.split('?')[0]);
+  const filePath = path.join(uploadsDir, filename);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send('Vídeo não encontrado');
+  }
+
+  const stat = fs.statSync(filePath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+
+  const ext = path.extname(filePath).toLowerCase();
+  let contentType = 'video/mp4';
+  if (ext === '.webm') contentType = 'video/webm';
+  else if (ext === '.mov') contentType = 'video/mp4'; // serve as video/mp4 for broad player support
+  else if (ext === '.ogg') contentType = 'video/ogg';
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'public, max-age=86400, no-transform');
+  res.setHeader('Accept-Ranges', 'bytes');
+
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+    if (start >= fileSize) {
+      res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
+      return res.end();
+    }
+
+    const chunksize = end - start + 1;
+    const fileStream = fs.createReadStream(filePath, { start, end });
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunksize,
+      'Content-Type': contentType
+    });
+    fileStream.pipe(res);
+  } else {
+    res.writeHead(200, {
+      'Content-Length': fileSize,
+      'Content-Type': contentType
+    });
+    fs.createReadStream(filePath).pipe(res);
+  }
+});
+
+// Static fallback for uploads folder
 app.use('/uploads', express.static(uploadsDir, {
   setHeaders: (res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');

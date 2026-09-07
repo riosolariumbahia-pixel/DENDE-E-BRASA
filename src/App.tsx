@@ -81,6 +81,34 @@ export default function App() {
 
   useEffect(() => {
     loadData();
+
+    // Poll remote config every 15s to immediately receive video changes across all visitor devices
+    const interval = setInterval(async () => {
+      try {
+        const latestConfig = await fetchRemoteRestaurantConfig();
+        if (latestConfig && latestConfig.videoUrl) {
+          setConfig((prev) => {
+            if (prev.videoUrl !== latestConfig.videoUrl) {
+              return latestConfig;
+            }
+            return prev;
+          });
+        }
+      } catch {
+        // ignore background poll error
+      }
+    }, 15000);
+
+    const handleFocus = async () => {
+      try {
+        const latestConfig = await fetchRemoteRestaurantConfig();
+        if (latestConfig && latestConfig.videoUrl) {
+          setConfig(latestConfig);
+        }
+      } catch {}
+    };
+    window.addEventListener('focus', handleFocus);
+
     // Load cart from session storage if exists
     const savedCart = sessionStorage.getItem('dendeebrasa_cart');
     if (savedCart) {
@@ -90,6 +118,11 @@ export default function App() {
         // ignore
       }
     }
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   // Save cart to sessionStorage
