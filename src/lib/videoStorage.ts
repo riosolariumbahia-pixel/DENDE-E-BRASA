@@ -63,6 +63,21 @@ export async function getSavedVideoUrl(): Promise<string | null> {
   }
 }
 
+export async function clearSavedVideo(): Promise<void> {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const delReq = store.delete('active_restaurant_video');
+      delReq.onsuccess = () => resolve();
+      delReq.onerror = () => resolve();
+    });
+  } catch {
+    // Ignore if not supported
+  }
+}
+
 export interface VideoUploadResult {
   videoUrl: string;
   filename: string;
