@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import {
   Flame,
   Beef,
@@ -8,13 +8,9 @@ import {
   ArrowRight,
   Utensils,
   Play,
-  Pause,
-  Volume2,
-  VolumeX,
-  Maximize2
+  Film
 } from 'lucide-react';
 import { RestaurantConfig } from '../types';
-import { getSavedVideoUrl } from '../lib/videoStorage';
 
 interface HeroProps {
   config: RestaurantConfig;
@@ -29,66 +25,6 @@ export const Hero: React.FC<HeroProps> = ({
   onScrollToPromos,
   onScrollToVideo
 }) => {
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(true);
-  const [videoSrc, setVideoSrc] = useState(config.videoUrl || '/dende-e-brasa-espaco.mp4');
-  const heroVideoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    getSavedVideoUrl().then((saved) => {
-      if (saved) {
-        setVideoSrc(saved);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    if (config.videoUrl) {
-      setVideoSrc(config.videoUrl);
-    }
-  }, [config.videoUrl]);
-
-  // Pause Hero video when scrolled off-screen so VideoSpotlightSection has 100% decoder priority
-  useEffect(() => {
-    const video = heroVideoRef.current;
-    if (!video) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            video.play().catch(() => {});
-            setIsPlaying(true);
-          } else {
-            video.pause();
-            setIsPlaying(false);
-          }
-        });
-      },
-      { threshold: 0.2 }
-    );
-
-    observer.observe(video);
-    return () => observer.disconnect();
-  }, []);
-
-  const togglePlay = () => {
-    if (!heroVideoRef.current) return;
-    if (isPlaying) {
-      heroVideoRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      heroVideoRef.current.play().catch(console.error);
-      setIsPlaying(true);
-    }
-  };
-
-  const toggleMute = () => {
-    if (!heroVideoRef.current) return;
-    heroVideoRef.current.muted = !isMuted;
-    setIsMuted(!isMuted);
-  };
-
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-orange-500/15 via-[#FFF8E7] to-[#FFF8E7] pt-8 pb-16 lg:pt-14 lg:pb-24">
       {/* Decorative background glows */}
@@ -176,97 +112,62 @@ export const Hero: React.FC<HeroProps> = ({
             </div>
           </div>
 
-          {/* Visual Showcase / Collage */}
+          {/* Visual Showcase / Collage (No duplicate video player here) */}
           <div className="lg:col-span-5 relative">
             <div className="relative mx-auto max-w-md lg:max-w-none">
-              {/* Primary Showcase: Interactive Video Player Card */}
-              <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-stone-950 group">
-                <video
-                  ref={heroVideoRef}
-                  src={videoSrc}
-                  className="w-full h-80 sm:h-96 object-cover cursor-pointer"
-                  autoPlay
-                  loop
-                  muted={isMuted}
-                  playsInline
-                  preload="auto"
-                  onClick={togglePlay}
-                  onEnded={(e) => {
-                    const target = e.currentTarget;
-                    target.currentTime = 0;
-                    target.play().catch(() => {});
-                  }}
+              {/* Primary Showcase Card: Culinary & Venue */}
+              <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-stone-900 group">
+                <img
+                  src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1000&q=80"
+                  alt="Dendê e Brasa Parrilla e Gastronomia Baiana"
+                  className="w-full h-80 sm:h-96 object-cover group-hover:scale-105 transition-transform duration-700"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/40 pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/20" />
 
-                {/* Top Video Header Badges */}
+                {/* Top Badges */}
                 <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-between z-10">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-[11px] font-black border border-white/20 shadow-sm">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                    <span>VÍDEO DO ESPAÇO</span>
+                    <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                    <span>EMPORIO GRECO • STELLA MARIS</span>
                   </span>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleMute();
-                      }}
-                      className="p-2 rounded-full bg-black/60 hover:bg-orange-600 text-white backdrop-blur-md border border-white/20 transition-all cursor-pointer shadow-sm"
-                      title={isMuted ? 'Ativar Áudio' : 'Mutar'}
-                    >
-                      {isMuted ? (
-                        <VolumeX className="w-3.5 h-3.5 text-yellow-300" />
-                      ) : (
-                        <Volume2 className="w-3.5 h-3.5 text-yellow-300" />
-                      )}
-                    </button>
-
-                    {onScrollToVideo && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onScrollToVideo();
-                        }}
-                        className="p-2 rounded-full bg-black/60 hover:bg-orange-600 text-white backdrop-blur-md border border-white/20 transition-all cursor-pointer shadow-sm"
-                        title="Ver Vídeo em Destaque"
-                      >
-                        <Maximize2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                  <span className="px-3 py-1 rounded-full bg-red-600/90 backdrop-blur-md text-white text-[11px] font-black shadow-sm">
+                    ⭐ 4.9 Salvador
+                  </span>
                 </div>
 
-                {/* Big Center Play Icon when paused */}
-                {!isPlaying && (
-                  <button
-                    onClick={togglePlay}
-                    className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-orange-600/90 text-white border-2 border-yellow-300 flex items-center justify-center shadow-xl hover:scale-110 transition-all cursor-pointer z-20"
-                  >
-                    <Play className="w-7 h-7 text-yellow-300 fill-yellow-300 ml-1" />
-                  </button>
-                )}
-
-                {/* Bottom Video Info */}
-                <div className="absolute bottom-4 left-4 right-4 text-white z-10">
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                {/* Bottom Overlay with CTA to Video Section */}
+                <div className="absolute bottom-4 left-4 right-4 text-white z-10 space-y-2">
+                  <div className="flex items-center justify-between">
                     <span className="inline-block px-3 py-1 rounded-full bg-orange-600 text-white font-black text-[11px] uppercase tracking-wider shadow-md">
-                      Stella Maris • Ao Vivo
+                      Ambiente & Gastronomia
                     </span>
-                    {onScrollToVideo && (
-                      <button
-                        onClick={onScrollToVideo}
-                        className="text-[11px] font-black text-yellow-300 hover:text-white underline cursor-pointer"
-                      >
-                        Ver Tour Completo ↓
-                      </button>
-                    )}
+                    <span className="text-[11px] text-yellow-300 font-bold">
+                      Mesas ao Ar Livre
+                    </span>
                   </div>
-                  <h3 className="text-xl font-black font-['Outfit']">Nosso Espaço & Parrilla</h3>
-                  <p className="text-xs text-yellow-200 font-medium">Mesas ao ar livre, telão de futebol & espetinhos na brasa viva</p>
+
+                  <h3 className="text-xl font-black font-['Outfit'] text-white">
+                    Parrilla Brava & Tradição Baiana
+                  </h3>
+
+                  <p className="text-xs text-stone-200 font-medium line-clamp-2">
+                    Cortes nobres na brasa, acarajé artesanal no puro dendê e telão ao vivo no coração de Stella Maris.
+                  </p>
+
+                  {/* Direct button to scroll to the single large video */}
+                  {onScrollToVideo && (
+                    <button
+                      onClick={onScrollToVideo}
+                      className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white font-black text-xs shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 group/btn"
+                    >
+                      <Film className="w-4 h-4 text-yellow-300 group-hover/btn:scale-110 transition-transform" />
+                      <span>🎬 Assistir ao Vídeo do Espaço (Veja Abaixo)</span>
+                      <ArrowRight className="w-3.5 h-3.5 group-hover/btn:translate-x-1 transition-transform" />
+                    </button>
+                  )}
                 </div>
               </div>
-
 
               {/* Floating Discount Pill */}
               <div className="absolute -top-4 -right-2 sm:-right-4 bg-yellow-400 text-orange-950 font-black text-xs px-4 py-2 rounded-full shadow-lg border border-orange-300 flex items-center gap-1.5 animate-bounce z-20">

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { RestaurantConfig } from '../types';
 import { getSavedVideoUrl } from '../lib/videoStorage';
+import { parseVideoUrl } from '../lib/videoUrlHelper';
 
 interface VideoSpotlightSectionProps {
   config: RestaurantConfig;
@@ -45,6 +46,8 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
   const [currentVideoSrc, setCurrentVideoSrc] = useState<string>(
     config.videoUrl || '/dende-e-brasa-espaco.mp4'
   );
+
+  const parsedVideo = parseVideoUrl(currentVideoSrc);
 
   // Sync with global config.videoUrl whenever updated
   useEffect(() => {
@@ -263,38 +266,50 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
             {/* Ambient subtle glow */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(234,88,12,0.15)_0%,transparent_70%)] pointer-events-none" />
 
-            {/* Main Video Element */}
-            <video
-              ref={videoRef}
-              key={currentVideoSrc}
-              src={currentVideoSrc}
-              className={`relative z-10 w-full h-full ${
-                isVerticalMode ? 'object-contain' : 'object-cover'
-              } cursor-pointer`}
-              playsInline
-              autoPlay
-              loop
-              muted={isMuted}
-              preload="auto"
-              onClick={togglePlay}
-              onEnded={(e) => {
-                const target = e.currentTarget;
-                target.currentTime = 0;
-                target.play().catch(() => {});
-              }}
-              onError={(e) => {
-                // Fallback to default bundled video if remote fails
-                const target = e.currentTarget;
-                if (target.src !== `${window.location.origin}/dende-e-brasa-espaco.mp4` && !target.src.endsWith('/dende-e-brasa-espaco.mp4')) {
-                  target.src = '/dende-e-brasa-espaco.mp4';
-                  target.load();
+            {/* Main Video Element (Embed or Direct) */}
+            {parsedVideo.type === 'youtube' || parsedVideo.type === 'vimeo' ? (
+              <iframe
+                src={parsedVideo.embedUrl}
+                title="Dendê e Brasa - Espaço do Restaurante"
+                className="relative z-10 w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            ) : (
+              <video
+                ref={videoRef}
+                key={currentVideoSrc}
+                src={parsedVideo.directUrl || currentVideoSrc}
+                className={`relative z-10 w-full h-full ${
+                  isVerticalMode ? 'object-contain' : 'object-cover'
+                } cursor-pointer`}
+                playsInline
+                autoPlay
+                loop
+                muted={isMuted}
+                preload="auto"
+                onClick={togglePlay}
+                onEnded={(e) => {
+                  const target = e.currentTarget;
+                  target.currentTime = 0;
                   target.play().catch(() => {});
-                }
-              }}
-            />
+                }}
+                onError={(e) => {
+                  // Fallback to default bundled video if remote fails
+                  const target = e.currentTarget;
+                  if (target.src !== `${window.location.origin}/dende-e-brasa-espaco.mp4` && !target.src.endsWith('/dende-e-brasa-espaco.mp4')) {
+                    target.src = '/dende-e-brasa-espaco.mp4';
+                    target.load();
+                    target.play().catch(() => {});
+                  }
+                }}
+              />
+            )}
 
-            {/* Video overlay ambient gradient */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/50 pointer-events-none z-10" />
+            {/* Video overlay ambient gradient (only for direct video) */}
+            {parsedVideo.type === 'direct' && (
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/50 pointer-events-none z-10" />
+            )}
 
             {/* Top Bar inside Video */}
             <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20 pointer-events-auto">
@@ -303,40 +318,42 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
                 <span>ESPAÇO REAL • SALVADOR / STELLA MARIS</span>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsVerticalMode(!isVerticalMode)}
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 hover:bg-orange-600 text-white text-xs font-bold backdrop-blur-md border border-white/20 transition-all cursor-pointer"
-                  title={isVerticalMode ? 'Mudar para formato cheio' : 'Mudar para formato vertical'}
-                >
-                  <Smartphone className="w-3.5 h-3.5 text-yellow-300" />
-                  <span>{isVerticalMode ? 'Modo Reel' : 'Ajustar'}</span>
-                </button>
+              {parsedVideo.type === 'direct' && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsVerticalMode(!isVerticalMode)}
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 hover:bg-orange-600 text-white text-xs font-bold backdrop-blur-md border border-white/20 transition-all cursor-pointer"
+                    title={isVerticalMode ? 'Mudar para formato cheio' : 'Mudar para formato vertical'}
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-yellow-300" />
+                    <span>{isVerticalMode ? 'Modo Reel' : 'Ajustar'}</span>
+                  </button>
 
-                <button
-                  onClick={toggleMute}
-                  className="p-2.5 rounded-full bg-black/70 hover:bg-orange-600 backdrop-blur-md text-white border border-white/20 transition-all cursor-pointer shadow-md"
-                  title={isMuted ? 'Ativar Áudio' : 'Desativar Áudio'}
-                >
-                  {isMuted ? (
-                    <VolumeX className="w-4 h-4 text-yellow-300" />
-                  ) : (
-                    <Volume2 className="w-4 h-4 text-yellow-300" />
-                  )}
-                </button>
+                  <button
+                    onClick={toggleMute}
+                    className="p-2.5 rounded-full bg-black/70 hover:bg-orange-600 backdrop-blur-md text-white border border-white/20 transition-all cursor-pointer shadow-md"
+                    title={isMuted ? 'Ativar Áudio' : 'Desativar Áudio'}
+                  >
+                    {isMuted ? (
+                      <VolumeX className="w-4 h-4 text-yellow-300" />
+                    ) : (
+                      <Volume2 className="w-4 h-4 text-yellow-300" />
+                    )}
+                  </button>
 
-                <button
-                  onClick={toggleFullscreen}
-                  className="p-2.5 rounded-full bg-black/70 hover:bg-orange-600 backdrop-blur-md text-white border border-white/20 transition-all cursor-pointer shadow-md"
-                  title="Tela Cheia"
-                >
-                  <Maximize className="w-4 h-4 text-white" />
-                </button>
-              </div>
+                  <button
+                    onClick={toggleFullscreen}
+                    className="p-2.5 rounded-full bg-black/70 hover:bg-orange-600 backdrop-blur-md text-white border border-white/20 transition-all cursor-pointer shadow-md"
+                    title="Tela Cheia"
+                  >
+                    <Maximize className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Big Central Play/Pause Button */}
-            {!isPlaying && (
+            {/* Big Central Play/Pause Button for direct video */}
+            {parsedVideo.type === 'direct' && !isPlaying && (
               <button
                 onClick={togglePlay}
                 className="absolute z-20 w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-orange-600/90 hover:bg-orange-600 text-white border-4 border-yellow-300 flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
@@ -346,12 +363,13 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
               </button>
             )}
 
-            {/* Bottom Controls Bar inside Video */}
-            <div
-              className={`absolute bottom-0 left-0 right-0 p-4 sm:p-6 z-20 bg-gradient-to-t from-black/95 via-black/60 to-transparent transition-opacity duration-300 ${
-                showControls || !isPlaying ? 'opacity-100' : 'opacity-0'
-              }`}
-            >
+            {/* Bottom Controls Bar inside Video (for direct video) */}
+            {parsedVideo.type === 'direct' && (
+              <div
+                className={`absolute bottom-0 left-0 right-0 p-4 sm:p-6 z-20 bg-gradient-to-t from-black/95 via-black/60 to-transparent transition-opacity duration-300 ${
+                  showControls || !isPlaying ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
               {/* Progress Slider */}
               <div className="flex items-center gap-3 mb-3">
                 <span className="text-white text-xs font-mono font-bold">
@@ -414,6 +432,7 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
                 </div>
               </div>
             </div>
+            )}
           </div>
 
           {/* Interactive Chapter Navigation Bar */}

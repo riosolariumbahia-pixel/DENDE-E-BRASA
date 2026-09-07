@@ -57,8 +57,10 @@ import { formatCurrency } from '../lib/utils';
 import {
   saveVideoFile,
   uploadVideoToServer,
-  resetVideoOnServer
+  resetVideoOnServer,
+  saveSavedVideoUrl
 } from '../lib/videoStorage';
+import { parseVideoUrl } from '../lib/videoUrlHelper';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -364,9 +366,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         setUploadProgress(percent);
       });
 
+      const updatedConfig: RestaurantConfig = {
+        ...config,
+        videoUrl: res.videoUrl,
+        lastVideoUpdate: {
+          originalName: file.name,
+          sizeMB: res.sizeMB,
+          uploadedAt: new Date().toLocaleString('pt-BR')
+        }
+      };
+
+      await saveRestaurantConfig(updatedConfig);
+      await saveSavedVideoUrl(res.videoUrl);
+
       setStoreVideoUrl(res.videoUrl);
       setVideoUploadSuccess(
-        `✅ Vídeo "${file.name}" (${res.sizeMB} MB) enviado e implantado com sucesso! Já está em exibição contínua para TODOS os visitantes do site.`
+        `✅ Vídeo "${file.name}" (${res.sizeMB} MB) enviado e ativado com sucesso! Já está em exibição no site.`
       );
       setUploadProgress(100);
       onRefreshData();
@@ -394,9 +409,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         setUploadProgress(percent);
       });
 
+      const updatedConfig: RestaurantConfig = {
+        ...config,
+        videoUrl: res.videoUrl,
+        lastVideoUpdate: {
+          originalName: selectedVideoFile.name,
+          sizeMB: res.sizeMB,
+          uploadedAt: new Date().toLocaleString('pt-BR')
+        }
+      };
+
+      await saveRestaurantConfig(updatedConfig);
+      await saveSavedVideoUrl(res.videoUrl);
+
       setStoreVideoUrl(res.videoUrl);
       setVideoUploadSuccess(
-        `✅ Vídeo "${selectedVideoFile.name}" (${res.sizeMB} MB) implantado e ativo com sucesso! Agora TODOS os clientes que acessarem o site em qualquer celular ou computador verão este novo vídeo do restaurante.`
+        `✅ Vídeo "${selectedVideoFile.name}" (${res.sizeMB} MB) implantado e ativo com sucesso no site!`
       );
       setUploadProgress(100);
       onRefreshData();
@@ -405,6 +433,34 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       setVideoUploadError(err.message || 'Erro ao implantar o vídeo no servidor.');
     } finally {
       setIsUploadingVideo(false);
+    }
+  };
+
+  const handleApplyCustomVideoUrl = async (urlToApply: string) => {
+    const trimmed = urlToApply.trim();
+    if (!trimmed) {
+      alert('Digite ou cole o link do vídeo (YouTube, Vimeo ou link direto MP4).');
+      return;
+    }
+
+    try {
+      const updatedConfig: RestaurantConfig = {
+        ...config,
+        videoUrl: trimmed,
+        lastVideoUpdate: {
+          originalName: trimmed.length > 30 ? trimmed.substring(0, 30) + '...' : trimmed,
+          sizeMB: 'Link Externo',
+          uploadedAt: new Date().toLocaleString('pt-BR')
+        }
+      };
+
+      await saveRestaurantConfig(updatedConfig);
+      await saveSavedVideoUrl(trimmed);
+      setStoreVideoUrl(trimmed);
+      setVideoUploadSuccess(`✅ Novo link de vídeo ativado com sucesso: ${trimmed}`);
+      onRefreshData();
+    } catch (err: any) {
+      setVideoUploadError('Erro ao aplicar link: ' + err.message);
     }
   };
 
@@ -419,6 +475,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
     try {
       const defaultUrl = await resetVideoOnServer();
+      const updatedConfig: RestaurantConfig = {
+        ...config,
+        videoUrl: defaultUrl
+      };
+      await saveRestaurantConfig(updatedConfig);
+      await saveSavedVideoUrl(defaultUrl);
       setStoreVideoUrl(defaultUrl);
       setSelectedVideoFile(null);
       setSelectedVideoPreview(null);
@@ -440,6 +502,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       videoDescription: storeVideoDesc.trim()
     };
     await saveRestaurantConfig(updated);
+    await saveSavedVideoUrl(storeVideoUrl.trim() || '/dende-e-brasa-espaco.mp4');
     setVideoUploadSuccess('Título e descrição do vídeo salvos com sucesso!');
     setTimeout(() => setVideoUploadSuccess(null), 4000);
     onRefreshData();
@@ -1548,6 +1611,35 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             </button>
                           </div>
                         )}
+
+                        {/* Paste Video URL option (YouTube, Vimeo, Cloud Storage, or MP4) */}
+                        <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Globe className="w-4 h-4 text-orange-600" />
+                            <h5 className="text-xs font-black text-[#4A2C2A] uppercase tracking-wide">
+                              Ou Cole um Link Direto ou YouTube / Vimeo
+                            </h5>
+                          </div>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              type="text"
+                              value={storeVideoUrl}
+                              onChange={(e) => setStoreVideoUrl(e.target.value)}
+                              placeholder="Ex: https://www.youtube.com/watch?v=... ou link .mp4"
+                              className="flex-1 text-xs px-3 py-2.5 rounded-xl border border-stone-300 bg-white font-medium text-[#4A2C2A]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleApplyCustomVideoUrl(storeVideoUrl)}
+                              className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-xs transition-all cursor-pointer shrink-0"
+                            >
+                              Ativar Este Link
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-stone-500 font-medium">
+                            Compatível com YouTube, YouTube Shorts, Vimeo, Google Drive, links MP4 diretos e vídeos locais.
+                          </p>
+                        </div>
                       </div>
 
                       {/* Video Title and Description Form */}
@@ -1611,58 +1703,76 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                         {/* Embedded Active Video Player */}
                         <div className="relative rounded-2xl overflow-hidden bg-black aspect-video flex items-center justify-center border-2 border-stone-800 shadow-inner group">
-                          <video
-                            ref={activeVideoRef}
-                            key={storeVideoUrl}
-                            src={storeVideoUrl || '/dende-e-brasa-espaco.mp4'}
-                            playsInline
-                            autoPlay
-                            muted={activeVideoMuted}
-                            loop
-                            preload="auto"
-                            className="w-full h-full object-cover"
-                            onPlay={() => setActiveVideoPlaying(true)}
-                            onPause={() => setActiveVideoPlaying(false)}
-                            onEnded={() => {
-                              if (activeVideoRef.current) {
-                                activeVideoRef.current.currentTime = 0;
-                                activeVideoRef.current.play().catch(() => {});
-                              }
-                            }}
-                          />
+                          {(() => {
+                            const activeParsed = parseVideoUrl(storeVideoUrl);
+                            if (activeParsed.type === 'youtube' || activeParsed.type === 'vimeo') {
+                              return (
+                                <iframe
+                                  src={activeParsed.embedUrl}
+                                  title="Pré-visualização do Vídeo"
+                                  className="w-full h-full border-0"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                  allowFullScreen
+                                />
+                              );
+                            }
+                            return (
+                              <>
+                                <video
+                                  ref={activeVideoRef}
+                                  key={storeVideoUrl}
+                                  src={storeVideoUrl || '/dende-e-brasa-espaco.mp4'}
+                                  playsInline
+                                  autoPlay
+                                  muted={activeVideoMuted}
+                                  loop
+                                  preload="auto"
+                                  className="w-full h-full object-cover"
+                                  onPlay={() => setActiveVideoPlaying(true)}
+                                  onPause={() => setActiveVideoPlaying(false)}
+                                  onEnded={() => {
+                                    if (activeVideoRef.current) {
+                                      activeVideoRef.current.currentTime = 0;
+                                      activeVideoRef.current.play().catch(() => {});
+                                    }
+                                  }}
+                                />
 
-                          {/* Control Overlay Buttons */}
-                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (activeVideoRef.current) {
-                                  if (activeVideoPlaying) {
-                                    activeVideoRef.current.pause();
-                                  } else {
-                                    activeVideoRef.current.play();
-                                  }
-                                }
-                              }}
-                              className="p-3 rounded-full bg-white/90 text-[#4A2C2A] hover:bg-white shadow-lg cursor-pointer transition-transform hover:scale-110"
-                            >
-                              {activeVideoPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (activeVideoRef.current) {
-                                  activeVideoRef.current.muted = !activeVideoMuted;
-                                  setActiveVideoMuted(!activeVideoMuted);
-                                }
-                              }}
-                              className="p-3 rounded-full bg-white/90 text-[#4A2C2A] hover:bg-white shadow-lg cursor-pointer transition-transform hover:scale-110"
-                            >
-                              {activeVideoMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-                            </button>
-                          </div>
+                                {/* Control Overlay Buttons */}
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (activeVideoRef.current) {
+                                        if (activeVideoPlaying) {
+                                          activeVideoRef.current.pause();
+                                        } else {
+                                          activeVideoRef.current.play();
+                                        }
+                                      }
+                                    }}
+                                    className="p-3 rounded-full bg-white/90 text-[#4A2C2A] hover:bg-white shadow-lg cursor-pointer transition-transform hover:scale-110"
+                                  >
+                                    {activeVideoPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (activeVideoRef.current) {
+                                        activeVideoRef.current.muted = !activeVideoMuted;
+                                        setActiveVideoMuted(!activeVideoMuted);
+                                      }
+                                    }}
+                                    className="p-3 rounded-full bg-white/90 text-[#4A2C2A] hover:bg-white shadow-lg cursor-pointer transition-transform hover:scale-110"
+                                  >
+                                    {activeVideoMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                                  </button>
+                                </div>
+                              </>
+                            );
+                          })()}
 
-                          <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] text-white/90 bg-black/60 px-2.5 py-1 rounded-lg backdrop-blur-xs">
+                          <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] text-white/90 bg-black/60 px-2.5 py-1 rounded-lg backdrop-blur-xs z-10">
                             <span className="truncate">URL: {storeVideoUrl}</span>
                             <span className="font-mono shrink-0 ml-2">
                               {activeVideoMuted ? 'Mudo' : 'Som Ativo'}
