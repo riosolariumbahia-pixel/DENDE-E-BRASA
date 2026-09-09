@@ -81,9 +81,9 @@ export const INITIAL_RESTAURANT_CONFIG: RestaurantConfig = {
     'Cerveja trincando e drinks artesanais',
     'Estacionamento no Empório Greco'
   ],
-  videoUrl: '/uploads/restaurant-video-1788783913175.mp4?t=1788783913220',
-  videoTitle: 'Espaço Real • Dendê e Brasa em Stella Maris',
-  videoDescription: 'Parrilla Brava com brasas incandescentes, espetinhos e queijo coalho grelhados na hora, mesas ao ar livre com famílias e amigos, telão transmitindo futebol ao vivo e cerveja geladíssima no Empório Greco.'
+  videoUrl: '',
+  videoTitle: '',
+  videoDescription: ''
 };
 
 export const INITIAL_PROMOTIONS: SpecialPromotion[] = [

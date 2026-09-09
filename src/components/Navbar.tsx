@@ -31,7 +31,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   const openStatus = checkStoreOpenStatus(config.hours);
 
   const navLinks = [
-    { label: 'O Espaço (Vídeo)', href: '#espaco-video', highlight: true },
     { label: 'Cardápio', href: '#cardapio' },
     { label: 'Promoções do Chef', href: '#promocoes' },
     { label: 'O Restaurante', href: '#sobre' },
@@ -98,15 +97,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               <a
                 key={link.href}
                 href={link.href}
-                className={`transition-colors py-1 relative after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px] after:bg-orange-600 hover:after:w-full after:transition-all flex items-center gap-1.5 ${
-                  link.highlight
-                    ? 'text-orange-600 font-black'
-                    : 'hover:text-orange-600'
-                }`}
+                className="transition-colors py-1 relative after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px] after:bg-orange-600 hover:after:w-full after:transition-all flex items-center gap-1.5 hover:text-orange-600"
               >
-                {link.highlight && (
-                  <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
-                )}
                 <span>{link.label}</span>
               </a>
             ))}

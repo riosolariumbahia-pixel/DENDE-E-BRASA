@@ -148,20 +148,17 @@ export const Hero: React.FC<HeroProps> = ({
                   </h3>
 
                   <p className="text-xs text-stone-200 font-medium line-clamp-2">
-                    Cortes nobres na brasa, acarajé artesanal no puro dendê e telão ao vivo no coração de Stella Maris.
+                    Cortes nobres na brasa, acarajé artesanal no puro dendê e ambiente acolhedor no coração de Stella Maris.
                   </p>
 
-                  {/* Direct button to scroll to the single large video */}
-                  {onScrollToVideo && (
-                    <button
-                      onClick={onScrollToVideo}
-                      className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white font-black text-xs shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 group/btn"
-                    >
-                      <Film className="w-4 h-4 text-yellow-300 group-hover/btn:scale-110 transition-transform" />
-                      <span>🎬 Assistir ao Vídeo do Espaço (Veja Abaixo)</span>
-                      <ArrowRight className="w-3.5 h-3.5 group-hover/btn:translate-x-1 transition-transform" />
-                    </button>
-                  )}
+                  <button
+                    onClick={onScrollToMenu}
+                    className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-black text-xs shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 group/btn"
+                  >
+                    <Utensils className="w-4 h-4 text-yellow-300 group-hover/btn:scale-110 transition-transform" />
+                    <span>Ver Pratos e Porções no Cardápio</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover/btn:translate-x-1 transition-transform" />
+                  </button>
                 </div>
               </div>
 

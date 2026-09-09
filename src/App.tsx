@@ -6,9 +6,6 @@ import {
   Hero
 } from './components/Hero';
 import {
-  VideoSpotlightSection
-} from './components/VideoSpotlightSection';
-import {
   PromotionsSection
 } from './components/PromotionsSection';
 import {
@@ -59,7 +56,7 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [adminInitialTab, setAdminInitialTab] = useState<'promocoes' | 'cardapio' | 'video' | 'loja' | 'supabase'>('promocoes');
+  const [adminInitialTab, setAdminInitialTab] = useState<'promocoes' | 'cardapio' | 'loja' | 'supabase'>('promocoes');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -237,15 +234,6 @@ export default function App() {
     setCart([]);
   };
 
-  const handleUpdateVideoUrl = async (newUrl: string) => {
-    const updated = {
-      ...config,
-      videoUrl: newUrl
-    };
-    setConfig(updated);
-    await saveRestaurantConfig(updated);
-  };
-
   // Scroll helpers
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -254,7 +242,7 @@ export default function App() {
     }
   };
 
-  const openAdminWithTab = (tab: 'promocoes' | 'cardapio' | 'video' | 'loja' | 'supabase' = 'promocoes') => {
+  const openAdminWithTab = (tab: 'promocoes' | 'cardapio' | 'loja' | 'supabase' = 'promocoes') => {
     setAdminInitialTab(tab);
     setIsAdminOpen(true);
   };
@@ -280,17 +268,6 @@ export default function App() {
           config={config}
           onScrollToMenu={() => scrollToSection('cardapio')}
           onScrollToPromos={() => scrollToSection('promocoes')}
-          onScrollToVideo={() => scrollToSection('espaco-video')}
-        />
-
-        {/* Video Spotlight - Main Presentation of the Restaurant Space */}
-        <VideoSpotlightSection
-          config={config}
-          onOpenAdmin={() => openAdminWithTab('video')}
-          onScrollToMenu={() => scrollToSection('cardapio')}
-          onScrollToLocation={() => scrollToSection('localizacao')}
-          onUpdateVideoUrl={handleUpdateVideoUrl}
-          isAdmin={isAdminLoggedIn}
         />
 
         {/* Promotions Section with Special Prices */}
