@@ -12,7 +12,16 @@ import {
   MessageCircle,
   MapPin,
   Utensils,
-  Smartphone
+  Smartphone,
+  PenLine,
+  Check,
+  Upload,
+  Link as LinkIcon,
+  RefreshCw,
+  Type,
+  FileVideo,
+  Save,
+  Quote
 } from 'lucide-react';
 import { RestaurantConfig } from '../types';
 import { getSavedVideoUrl } from '../lib/videoStorage';
@@ -21,6 +30,7 @@ import { parseVideoUrl } from '../lib/videoUrlHelper';
 interface VideoSpotlightSectionProps {
   config: RestaurantConfig;
   onUpdateVideoUrl?: (newUrl: string) => void;
+  onUpdateDescription?: (newDescription: string) => void;
   onScrollToMenu: () => void;
   onScrollToLocation: () => void;
   onOpenAdmin?: () => void;
@@ -29,23 +39,100 @@ interface VideoSpotlightSectionProps {
 
 export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
   config,
+  onUpdateVideoUrl,
+  onUpdateDescription,
   onScrollToMenu,
   onScrollToLocation
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(true);
   const [currentTime, setCurrentTime] = useState<number>(0);
-  const [duration, setDuration] = useState<number>(28);
+  const [duration, setDuration] = useState<number>(20);
   const [activeChapter, setActiveChapter] = useState<number>(0);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showControls, setShowControls] = useState<boolean>(true);
-  const [isVerticalMode, setIsVerticalMode] = useState<boolean>(true);
+  const [isVerticalMode, setIsVerticalMode] = useState<boolean>(false);
   const [currentVideoSrc, setCurrentVideoSrc] = useState<string>(
     config.videoUrl || '/dende-e-brasa-espaco.mp4'
   );
+
+  // Caixa de Texto state (with local persistence)
+  const defaultText =
+    config.videoDescription ||
+    'Parrilla Brava com carnes e espetinhos na brasa viva, acarajé frito no puro dendê na hora, mesas ao ar livre para a família e telão com jogos de futebol ao vivo no Empório Greco em Stella Maris.';
+
+  const [boxText, setBoxText] = useState<string>(() => {
+    return localStorage.getItem('dende_video_box_text') || defaultText;
+  });
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+
+  const textPresets = [
+    {
+      label: '🔥 Brasa & Acarajé',
+      text: 'Parrilla Brava com cortes nobres na brasa viva, acarajé frito no puro dendê, mesas ao ar livre e chopp trincando de gelado no Empório Greco.'
+    },
+    {
+      label: '⚽ Futebol no Telão',
+      text: 'Hoje tem rodada de futebol no nosso super telão! Venha torcer com a gente saboreando espetinhos suculentos e cerveja geladíssima.'
+    },
+    {
+      label: '👨‍👩‍👧‍👦 Família & Amigos',
+      text: 'Ambiente seguro e aconchegante com espaço kids no complexo, mesas arejadas sob a sombra e atendimento acolhedor em Stella Maris.'
+    }
+  ];
+
+  const handleSaveBoxText = (overrideText?: string) => {
+    const textToSave = (overrideText !== undefined ? overrideText : boxText).trim();
+    if (!textToSave) return;
+    localStorage.setItem('dende_video_box_text', textToSave);
+    if (onUpdateDescription) {
+      onUpdateDescription(textToSave);
+    }
+    setSaveFeedback('Texto salvo com sucesso nesta caixa!');
+    setTimeout(() => setSaveFeedback(null), 3500);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Instant local preview
+    const localUrl = URL.createObjectURL(file);
+    setCurrentVideoSrc(localUrl);
+    setUploadFeedback(`Vídeo "${file.name}" inserido com sucesso!`);
+    setTimeout(() => setUploadFeedback(null), 4000);
+
+    if (onUpdateVideoUrl) {
+      onUpdateVideoUrl(localUrl);
+    }
+
+    // Try server upload
+    try {
+      setIsUploading(true);
+      const formData = new FormData();
+      formData.append('video', file);
+      const res = await fetch('/api/upload-video', {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.videoUrl && onUpdateVideoUrl) {
+          onUpdateVideoUrl(data.videoUrl);
+        }
+      }
+    } catch (err) {
+      console.warn('Upload error:', err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const parsedVideo = parseVideoUrl(currentVideoSrc);
 
@@ -238,9 +325,120 @@ export const VideoSpotlightSection: React.FC<VideoSpotlightSectionProps> = ({
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#4A2C2A] font-['Outfit'] tracking-tight">
             Sinta o Clima do <span className="bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">Dendê e Brasa</span>
           </h2>
+        </div>
 
-          <p className="text-base sm:text-lg text-[#4A2C2A]/90 font-medium leading-relaxed">
-            {config.videoDescription || 'Carnes e espetinhos suculentos na Parrilla Brava com brasa viva, mesas ao ar livre, telão com jogos de futebol ao vivo e resenha baiana no Empório Greco.'}
+        {/* Caixa de Texto do Espaço para Escrever um Texto Nesta Caixa */}
+        <div className="max-w-4xl mx-auto mb-8 bg-white/95 backdrop-blur-md rounded-3xl p-5 sm:p-7 border-2 border-orange-200 shadow-[0_10px_30px_rgba(74,44,42,0.08)] text-left">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-orange-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-white shadow-sm shrink-0">
+                <PenLine className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-black text-[#4A2C2A] font-['Outfit']">
+                    Caixa de Texto do Espaço
+                  </h3>
+                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                    Escreva seu texto aqui
+                  </span>
+                </div>
+                <p className="text-xs text-[#4A2C2A]/75">
+                  Digite ou altere abaixo a mensagem que os clientes verão no banner do restaurante:
+                </p>
+              </div>
+            </div>
+
+            {/* Botão de upload/trocar arquivo de vídeo */}
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Selecione um arquivo de vídeo do seu celular ou computador"
+              >
+                <Upload className="w-3.5 h-3.5 text-amber-700" />
+                <span>{isUploading ? 'Carregando...' : 'Carregar Vídeo do Celular/PC'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Área da Caixa de Texto editável */}
+          <div className="space-y-3">
+            <div className="relative">
+              <textarea
+                value={boxText}
+                onChange={(e) => setBoxText(e.target.value)}
+                placeholder="Escreva nesta caixa o texto que você deseja mostrar para os clientes sobre o restaurante (ambiente, carnes na brasa, acarajé, futebol ao vivo, mesas ao ar livre)..."
+                rows={3}
+                className="w-full p-4 rounded-2xl bg-orange-50/50 hover:bg-orange-50/80 focus:bg-white border-2 border-orange-200 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/15 transition-all text-[#4A2C2A] text-sm sm:text-base font-medium leading-relaxed resize-none outline-none"
+              />
+              <div className="absolute bottom-3 right-3 text-[11px] font-bold text-[#4A2C2A]/40 pointer-events-none">
+                {boxText.length} caracteres
+              </div>
+            </div>
+
+            {/* Sugestões Rápidas e Botão Salvar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-black text-[#4A2C2A]/70 flex items-center gap-1 mr-1">
+                  <Sparkles className="w-3 h-3 text-orange-500 fill-orange-500" />
+                  <span>Ideias Rápidas:</span>
+                </span>
+                {textPresets.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => {
+                      setBoxText(preset.text);
+                      handleSaveBoxText(preset.text);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-orange-100/70 hover:bg-orange-200 text-orange-950 text-xs font-bold transition-all cursor-pointer"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleSaveBoxText()}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs sm:text-sm shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer shrink-0"
+              >
+                <Save className="w-4 h-4 text-yellow-300" />
+                <span>Salvar Texto Nesta Caixa</span>
+              </button>
+            </div>
+
+            {/* Feedback de sucesso */}
+            {saveFeedback && (
+              <div className="p-2.5 rounded-xl bg-green-50 border border-green-300 text-green-800 text-xs font-black flex items-center gap-2 animate-fadeIn">
+                <Check className="w-4 h-4 text-green-600 shrink-0" />
+                <span>{saveFeedback}</span>
+              </div>
+            )}
+            {uploadFeedback && (
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-black flex items-center gap-2 animate-fadeIn">
+                <FileVideo className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{uploadFeedback}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Live quote banner displaying the box text */}
+        <div className="max-w-3xl mx-auto mb-8 p-4 rounded-2xl bg-amber-500/10 border border-amber-300/60 text-center">
+          <Quote className="w-5 h-5 text-orange-500 mx-auto mb-1 opacity-75" />
+          <p className="text-base sm:text-lg text-[#4A2C2A] font-semibold leading-relaxed italic">
+            "{boxText}"
           </p>
         </div>
 
